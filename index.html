@@ -26,8 +26,6 @@
         .card { background: #ffffff; border-radius: 1.25rem; padding: 1.2rem; margin-bottom: 0.75rem; box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.4); color: #1a1a1a; position: relative; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
         textarea { background: transparent; border: none; outline: none; resize: none; width: 100%; font-family: inherit; font-size: 14px; font-weight: 600; color: #111827; padding: 0; margin: 0; -webkit-user-select: text; user-select: text; }
         .list-label { color: var(--accent-orange); font-size: 11px; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; }
-        
-        /* Login Overlay */
         #login-screen { position: fixed; inset: 0; z-index: 200; background: var(--ui-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .kanban-column::-webkit-scrollbar { width: 3px; }
         .kanban-column::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
@@ -35,16 +33,14 @@
 </head>
 <body>
 
-    <!-- Login Container -->
     <div id="login-screen">
         <h1 class="text-[#d1d5db] text-[14px] font-black tracking-[0.4em] uppercase mb-8">Task Manager</h1>
-        <button onclick="login()" class="bg-[#FF8C00] text-white px-10 py-4 rounded-full font-bold text-xs tracking-widest uppercase shadow-xl hover:bg-orange-600 transition">
+        <button id="login-btn" onclick="login()" class="bg-[#FF8C00] text-white px-10 py-4 rounded-full font-bold text-xs tracking-widest uppercase shadow-xl hover:bg-orange-600 transition">
             Sign in with Google
         </button>
-        <p id="auth-status" class="text-orange-400 text-[10px] mt-6 font-bold uppercase tracking-widest"></p>
+        <p id="status-msg" class="text-[#FF8C00] text-[10px] mt-8 uppercase font-bold tracking-widest text-center px-6 leading-relaxed opacity-80">Connecting...</p>
     </div>
 
-    <!-- Main App Container (Hidden by default) -->
     <div id="app-content" class="hidden h-full flex flex-col">
         <nav class="flex justify-between items-center px-8 py-4 glass z-50">
             <div class="flex flex-col">
@@ -59,7 +55,6 @@
         <div id="main-content"></div>
     </div>
 
-    <!-- Priority Picker Overlay -->
     <div id="priority-popup" class="hidden fixed inset-0 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center z-[100]">
         <div class="w-full sm:w-80 bg-[#313131] p-8 rounded-t-[2.5rem] sm:rounded-[3rem] border border-white/5 text-center shadow-2xl">
             <div class="flex flex-col gap-2">
@@ -74,9 +69,10 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
+        // CONFIG (Using your provided URL)
         const firebaseConfig = {
             apiKey: "AIzaSyCRSI7mZQDo6WiECYM4Cbh3ZEOZjnH6YaU",
             authDomain: "my-tasks-319e9.firebaseapp.com",
@@ -84,68 +80,102 @@
             projectId: "my-tasks-319e9",
             storageBucket: "my-tasks-319e9.firebasestorage.app",
             messagingSenderId: "789706458775",
-            appId: "1:789706458775:web:bf61fcdba5d9cbf59f4bd2",
-            measurementId: "G-WLKSCG3P1D"
+            appId: "1:789706458775:web:bf61fcdba5d9cbf59f4bd2"
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
         const auth = getAuth(app);
         const provider = new GoogleAuthProvider();
-        const tasksRef = ref(db, 'tasks_data');
+        const rootRef = ref(db, "/");
 
         let tasks = [], projects = ["Inbox"], prioritiesArr = ["red", "orange", "yellow", "blue"];
         let viewMode = 'project', activeTaskId = null, editingId = null;
 
-        // --- AUTHENTICATION LOGIC ---
-        onAuthStateChanged(auth, (user) => {
-            const loginScreen = document.getElementById('login-screen');
-            const appContent = document.getElementById('app-content');
-            const status = document.getElementById('auth-status');
+        function updateStatus(msg) {
+            console.log(msg);
+            const el = document.getElementById('status-msg');
+            if (el) el.innerText = msg;
+        }
 
+        // Handle the return from Redirect (Better for Safari/iPhone)
+        getRedirectResult(auth).catch(e => updateStatus("Redirect Error: " + e.code));
+
+        // --- AUTH CONTROLLER ---
+        onAuthStateChanged(auth, (user) => {
             if (user) {
-                if (user.email.toLowerCase() === "jnymac@gmail.com") {
-                    loginScreen.classList.add('hidden');
-                    appContent.classList.remove('hidden');
+                const email = user.email.toLowerCase();
+                if (email === "jnymac@gmail.com") {
+                    updateStatus("Login Success. Loading Database...");
                     initSync();
                 } else {
-                    status.innerText = "Denied: " + user.email;
+                    updateStatus("Access Denied: " + email);
                     setTimeout(() => signOut(auth), 3000);
                 }
             } else {
-                loginScreen.classList.remove('hidden');
-                appContent.classList.add('hidden');
+                updateStatus("Please Sign In");
+                document.getElementById('login-screen').classList.remove('hidden');
+                document.getElementById('app-content').classList.add('hidden');
             }
         });
 
-        window.login = () => signInWithPopup(auth, provider).catch(e => alert("Error: " + e.code));
+        window.login = () => {
+            updateStatus("Redirecting...");
+            // Use Redirect for mobile compatibility, fallback to Popup for desktop
+            if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+                signInWithRedirect(auth, provider);
+            } else {
+                signInWithPopup(auth, provider).catch(e => updateStatus("Auth Error: " + e.code));
+            }
+        };
+
         window.logout = () => signOut(auth);
 
-        // --- DATA SYNC ---
-        function initSync() {
-            onValue(tasksRef, (snapshot) => {
+        // --- SYNC ---
+        async function initSync() {
+            try {
+                // Initial one-time fetch
+                const snapshot = await get(rootRef);
                 const data = snapshot.val();
-                if (data) {
-                    tasks = data.tasks || [];
+                
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('app-content').classList.remove('hidden');
+
+                if (data && data.tasks) {
+                    tasks = data.tasks;
                     projects = data.projects || ["Inbox"];
                     prioritiesArr = data.priorities || ["red", "orange", "yellow", "blue"];
-                    window.render();
                 } else {
-                    window.save(); 
+                    await window.save(); // Setup structure
                 }
-            });
+                window.render();
+
+                // Live updates
+                onValue(rootRef, (snap) => {
+                    const d = snap.val();
+                    if (d && d.tasks) {
+                        tasks = d.tasks;
+                        projects = d.projects || projects;
+                        prioritiesArr = d.priorities || prioritiesArr;
+                        window.render();
+                    }
+                });
+            } catch (err) {
+                updateStatus("DB Error: " + err.message);
+                console.error(err);
+            }
         }
 
-        window.save = () => set(tasksRef, { tasks, projects, priorities: prioritiesArr });
+        window.save = () => set(rootRef, { tasks, projects, priorities: prioritiesArr });
 
-        // --- RENDERING ENGINE ---
+        // --- UI ---
         window.render = function() {
             const main = document.getElementById('main-content');
             if(!main) return;
             main.innerHTML = '';
             updateNav();
-
             const colList = viewMode === 'project' ? projects : prioritiesArr;
+            
             colList.forEach(col => {
                 const columnTasks = tasks.filter(t => viewMode === 'project' ? t.project === col : t.priority === col)
                     .sort((a, b) => viewMode === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
@@ -153,12 +183,12 @@
                 const wrapper = document.createElement('div');
                 wrapper.className = "column-wrapper";
                 wrapper.dataset.colname = col;
-
                 const label = viewMode === 'project' ? col : getPriorityLabel(col);
+
                 wrapper.innerHTML = `
                     <div class="flex items-center justify-between mb-1 mt-3 px-1 handle cursor-grab flex-shrink-0">
                         <h2 onclick="${viewMode === 'project' ? `renameProject('${col}')` : ''}" class="list-label">${label}</h2>
-                        ${viewMode === 'project' ? `<button onclick="deleteProject('${col}')" class="text-gray-500 text-sm hover:text-red-400 px-1">×</button>` : ''}
+                        ${viewMode === 'project' ? `<button onclick="deleteProject('${col}')" class="text-gray-500 text-lg hover:text-red-400 px-1">×</button>` : ''}
                     </div>
                     <button onclick="addTaskAtPos('${col}', 'top')" class="btn-add mb-1">+</button>
                     <div class="kanban-column" data-col="${col}">
@@ -166,12 +196,12 @@
                             const isEditing = editingId === task.id;
                             return `
                             <div data-id="${task.id}" class="card ${isEditing ? 'ring-2 ring-orange-500/30' : ''}">
-                                ${isEditing ? `<button onclick="deleteTask('${task.id}')" class="absolute top-4 left-4 text-gray-400 hover:text-red-500 transition">🗑️</button>` : ''}
+                                ${isEditing ? `<button onclick="deleteTask('${task.id}')" class="absolute top-4 left-4 text-gray-400 hover:text-red-500">🗑️</button>` : ''}
                                 <div class="${isEditing ? 'pl-8' : ''}" onclick="enterEditMode('${task.id}')">
                                     ${isEditing ? `<textarea id="edit-${task.id}" onblur="exitEditMode('${task.id}', this.value)" onkeydown="if(event.key==='Enter'){this.blur(); event.preventDefault();}">${task.text}</textarea>` 
                                     : `<p class="text-[14px] font-bold leading-snug pr-6 cursor-text">${task.text}</p>`}
                                 </div>
-                                <button onclick="openPopup('${task.id}')" class="absolute top-4 right-4 text-xl star-${task.priority} transition">★</button>
+                                <button onclick="openPopup('${task.id}')" class="absolute top-4 right-4 text-xl star-${task.priority} transition hover:scale-125">★</button>
                                 <div class="mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest ${isEditing ? 'pl-8' : ''}">
                                     ${viewMode === 'project' ? getPriorityLabel(task.priority) : task.project}
                                 </div>
