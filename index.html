@@ -38,7 +38,7 @@
         <button id="login-btn" onclick="login()" class="bg-[#FF8C00] text-white px-10 py-4 rounded-full font-bold text-xs tracking-widest uppercase shadow-xl hover:bg-orange-600 transition">
             Sign in with Google
         </button>
-        <p id="status-msg" class="text-[#FF8C00] text-[10px] mt-8 uppercase font-bold tracking-widest text-center px-6 leading-relaxed opacity-80">Connecting...</p>
+        <p id="status-msg" class="text-[#FF8C00] text-[10px] mt-8 uppercase font-bold tracking-widest text-center px-6 leading-relaxed opacity-80">Ready to start</p>
     </div>
 
     <div id="app-content" class="hidden h-full flex flex-col">
@@ -70,9 +70,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-        import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // CONFIG (Using your provided URL)
         const firebaseConfig = {
             apiKey: "AIzaSyCRSI7mZQDo6WiECYM4Cbh3ZEOZjnH6YaU",
             authDomain: "my-tasks-319e9.firebaseapp.com",
@@ -80,14 +79,15 @@
             projectId: "my-tasks-319e9",
             storageBucket: "my-tasks-319e9.firebasestorage.app",
             messagingSenderId: "789706458775",
-            appId: "1:789706458775:web:bf61fcdba5d9cbf59f4bd2"
+            appId: "1:789706458775:web:bf61fcdba5d9cbf59f4bd2",
+            measurementId: "G-WLKSCG3P1D"
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
         const auth = getAuth(app);
         const provider = new GoogleAuthProvider();
-        const rootRef = ref(db, "/");
+        const dataRef = ref(db, 'tasks_data'); // Matches the Rules Step 1
 
         let tasks = [], projects = ["Inbox"], prioritiesArr = ["red", "orange", "yellow", "blue"];
         let viewMode = 'project', activeTaskId = null, editingId = null;
@@ -98,18 +98,17 @@
             if (el) el.innerText = msg;
         }
 
-        // Handle the return from Redirect (Better for Safari/iPhone)
-        getRedirectResult(auth).catch(e => updateStatus("Redirect Error: " + e.code));
+        // Handle the return from Redirect (Safari fix)
+        getRedirectResult(auth).catch(e => updateStatus("Auth Error: " + e.code));
 
         // --- AUTH CONTROLLER ---
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                const email = user.email.toLowerCase();
-                if (email === "jnymac@gmail.com") {
-                    updateStatus("Login Success. Loading Database...");
+                if (user.email.toLowerCase() === "jnymac@gmail.com") {
+                    updateStatus("Login Success. Accessing Database...");
                     initSync();
                 } else {
-                    updateStatus("Access Denied: " + email);
+                    updateStatus("Unauthorized Account: " + user.email);
                     setTimeout(() => signOut(auth), 3000);
                 }
             } else {
@@ -121,52 +120,56 @@
 
         window.login = () => {
             updateStatus("Redirecting...");
-            // Use Redirect for mobile compatibility, fallback to Popup for desktop
-            if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-                signInWithRedirect(auth, provider);
-            } else {
-                signInWithPopup(auth, provider).catch(e => updateStatus("Auth Error: " + e.code));
-            }
+            setPersistence(auth, browserLocalPersistence).then(() => {
+                if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+                    signInWithRedirect(auth, provider);
+                } else {
+                    signInWithPopup(auth, provider).catch(e => updateStatus("Popup Blocked. Error: " + e.code));
+                }
+            });
         };
 
-        window.logout = () => signOut(auth);
+        window.logout = () => signOut(auth).then(() => window.location.reload());
 
-        // --- SYNC ---
+        // --- DATA SYNC ---
         async function initSync() {
             try {
-                // Initial one-time fetch
-                const snapshot = await get(rootRef);
+                // Pulse check: try to get data once
+                const snapshot = await get(dataRef);
                 const data = snapshot.val();
                 
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('app-content').classList.remove('hidden');
 
-                if (data && data.tasks) {
-                    tasks = data.tasks;
+                if (data) {
+                    tasks = data.tasks || [];
                     projects = data.projects || ["Inbox"];
                     prioritiesArr = data.priorities || ["red", "orange", "yellow", "blue"];
+                    window.render();
                 } else {
-                    await window.save(); // Setup structure
+                    // Start fresh if cloud is empty
+                    updateStatus("Initializing Database...");
+                    await window.save();
                 }
-                window.render();
 
-                // Live updates
-                onValue(rootRef, (snap) => {
+                // Listen for any future changes
+                onValue(dataRef, (snap) => {
                     const d = snap.val();
-                    if (d && d.tasks) {
-                        tasks = d.tasks;
-                        projects = d.projects || projects;
+                    if (d) {
+                        tasks = d.tasks || [];
+                        projects = d.projects || ["Inbox"];
                         prioritiesArr = d.priorities || prioritiesArr;
                         window.render();
                     }
                 });
+
             } catch (err) {
-                updateStatus("DB Error: " + err.message);
+                updateStatus("Database Connection Error. Refresh page.");
                 console.error(err);
             }
         }
 
-        window.save = () => set(rootRef, { tasks, projects, priorities: prioritiesArr });
+        window.save = () => set(dataRef, { tasks, projects, priorities: prioritiesArr });
 
         // --- UI ---
         window.render = function() {
@@ -175,16 +178,13 @@
             main.innerHTML = '';
             updateNav();
             const colList = viewMode === 'project' ? projects : prioritiesArr;
-            
             colList.forEach(col => {
                 const columnTasks = tasks.filter(t => viewMode === 'project' ? t.project === col : t.priority === col)
                     .sort((a, b) => viewMode === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
-
                 const wrapper = document.createElement('div');
                 wrapper.className = "column-wrapper";
                 wrapper.dataset.colname = col;
                 const label = viewMode === 'project' ? col : getPriorityLabel(col);
-
                 wrapper.innerHTML = `
                     <div class="flex items-center justify-between mb-1 mt-3 px-1 handle cursor-grab flex-shrink-0">
                         <h2 onclick="${viewMode === 'project' ? `renameProject('${col}')` : ''}" class="list-label">${label}</h2>
@@ -210,7 +210,6 @@
                     </div>
                     <button onclick="addTaskAtPos('${col}', 'bottom')" class="btn-add mt-1 mb-4">+</button>`;
                 main.appendChild(wrapper);
-
                 if (!editingId) {
                     new Sortable(wrapper.querySelector('.kanban-column'), {
                         group: 'tasks', animation: 200, ghostClass: 'sortable-ghost', delay: 150, delayOnTouchOnly: true,
@@ -218,7 +217,6 @@
                     });
                 }
             });
-
             if (viewMode === 'project') {
                 const addCol = document.createElement('div');
                 addCol.className = "column-wrapper flex items-center justify-center";
