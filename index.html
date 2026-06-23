@@ -13,57 +13,51 @@
         }
         body { font-family: -apple-system, sans-serif; background-color: var(--ui-bg); color: #f8fafc; overscroll-behavior: none; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         nav { height: 80px; flex-shrink: 0; }
+        
+        /* Main board layout */
         #main-content { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; flex-grow: 1; height: calc(100vh - 80px); }
         .column-wrapper { flex: 0 0 85vw; padding: 0 12px; scroll-snap-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); display: flex; flex-direction: column; height: 100%; }
         .column-wrapper:nth-child(even) { background-color: var(--ui-shading); }
-        @media (min-width: 768px) { .column-wrapper { flex: 0 0 320px; scroll-snap-align: start; } }
+        @media (min-width: 768px) { .column-wrapper { flex: 0 0 300px; scroll-snap-align: start; } }
         
-        /* INDEPENDENT COLUMN SCROLLING */
+        /* Independent List Scrolling */
         .kanban-column { flex-grow: 1; overflow-y: auto; overflow-x: hidden; padding-right: 2px; margin-bottom: 4px; -webkit-overflow-scrolling: touch; }
         .kanban-column::-webkit-scrollbar { width: 3px; }
         .kanban-column::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
 
-        .card { background: #ffffff; border-radius: 1.25rem; padding: 1rem; margin-bottom: 0.75rem; box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.4); color: #1a1a1a; position: relative; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
+        /* Compact White Cards */
+        .card { background: #ffffff; border-radius: 1.25rem; padding: 1.2rem; margin-bottom: 0.75rem; box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.4); color: #1a1a1a; position: relative; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
         textarea { background: transparent; border: none; outline: none; resize: none; width: 100%; font-family: inherit; font-size: 14px; font-weight: 600; color: #111827; padding: 0; margin: 0; user-select: text; }
         
         .list-label { color: var(--accent-orange); font-size: 14px; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; }
         .btn-add { width: 100%; padding: 6px; font-size: 24px; font-weight: 300; color: rgba(255,255,255,0.15); border-radius: 0.75rem; transition: all 0.2s; line-height: 1; flex-shrink: 0; }
         .btn-add:hover { color: var(--accent-orange); }
         
-        #login-screen { position: fixed; inset: 0; z-index: 200; background: var(--ui-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
         .glass { background: rgba(49, 49, 49, 0.9); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .sortable-ghost { opacity: 0.1 !important; background: #94a3b8 !important; border-radius: 1rem; }
     </style>
 </head>
 <body>
 
-    <!-- Access Screen -->
-    <div id="login-screen">
-        <h1 class="text-[#d1d5db] text-[14px] font-black tracking-[0.4em] uppercase mb-8">Task Manager</h1>
-        <div class="flex flex-col gap-4 w-72">
-            <input type="password" id="pass-input" placeholder="Enter Master Password" class="bg-[#3d3d3d] border border-white/10 rounded-full px-6 py-4 text-white text-center text-sm outline-none focus:border-[#FF8C00]">
-            <button onclick="handleAccess()" class="bg-[#FF8C00] text-white py-4 rounded-full font-bold text-xs tracking-widest uppercase shadow-xl hover:bg-orange-600 transition">
-                Access Board
-            </button>
-        </div>
-        <p id="system-log" class="text-white/20 text-[9px] mt-8 uppercase tracking-widest">Locked</p>
-    </div>
-
-    <!-- Main Board -->
-    <div id="app-content" class="hidden h-full flex flex-col">
-        <nav class="flex justify-between items-center px-8 py-4 glass z-50">
-            <div class="flex flex-col">
-                <h1 class="text-[14px] font-black tracking-[0.3em] uppercase text-[#d1d5db] mb-1">Task Manager</h1>
-                <div class="flex gap-6">
-                    <button onclick="app.toggleView('project')" id="btn-project" class="text-[14px] font-bold uppercase transition">Projects</button>
-                    <button onclick="app.toggleView('priority')" id="btn-priority" class="text-[14px] font-bold uppercase transition">Priorities</button>
-                </div>
+    <nav class="flex justify-between items-center px-8 py-4 glass z-50">
+        <div class="flex flex-col">
+            <h1 class="text-[14px] font-black tracking-[0.3em] uppercase text-[#d1d5db] mb-1">Task Manager</h1>
+            <div class="flex gap-6">
+                <button onclick="app.toggleView('project')" id="btn-project" class="text-[14px] font-bold uppercase transition">Projects</button>
+                <button onclick="app.toggleView('priority')" id="btn-priority" class="text-[14px] font-bold uppercase transition">Priorities</button>
             </div>
-            <button onclick="app.exit()" class="text-[10px] font-black text-[#d1d5db] uppercase tracking-widest hover:text-[#FF8C00]">Logout</button>
-        </nav>
-        <div id="main-content"></div>
-    </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <span id="sync-status" class="text-[9px] font-bold text-white/20 uppercase tracking-widest">Connecting...</span>
+            <button onclick="app.exportData()" class="text-xl opacity-20 hover:opacity-100 transition">💾</button>
+        </div>
+    </nav>
 
-    <!-- Priority Picker Overlay -->
+    <main id="main-content">
+        <div class="p-10 text-gray-500 uppercase tracking-[0.3em] text-xs font-bold">Synchronizing...</div>
+    </main>
+
+    <!-- Priority Popup -->
     <div id="priority-popup" class="hidden fixed inset-0 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center z-[100]">
         <div class="w-full sm:w-80 bg-[#313131] p-8 rounded-t-[2.5rem] sm:rounded-[3rem] border border-white/5 text-center shadow-2xl">
             <div class="flex flex-col gap-2">
@@ -93,9 +87,10 @@
         const fbApp = initializeApp(firebaseConfig);
         const db = getDatabase(fbApp);
 
-        // Core App Logic Object (Exposed to window)
+        // HARDCODED ID: This replaces the login screen
+        const VAULT_ID = "jnymac_main_vault"; 
+
         window.app = {
-            wsID: localStorage.getItem('task_master_pwd') || "",
             tasks: [],
             projects: ["Inbox"],
             prioritiesArr: ["red", "orange", "yellow", "blue"],
@@ -104,12 +99,10 @@
             editingId: null,
 
             init: function() {
-                if (!this.wsID) return;
-                document.getElementById('login-screen').classList.add('hidden');
-                document.getElementById('app-content').classList.remove('hidden');
-                
-                const dataRef = ref(db, 'vault/' + this.wsID);
+                const dataRef = ref(db, 'vaults/' + VAULT_ID);
                 onValue(dataRef, (snapshot) => {
+                    document.getElementById('sync-status').innerText = "Live Sync";
+                    document.getElementById('sync-status').style.color = "var(--accent-orange)";
                     const data = snapshot.val();
                     if (data) {
                         this.tasks = data.tasks || [];
@@ -123,8 +116,7 @@
             },
 
             save: function() {
-                if (!this.wsID) return;
-                set(ref(db, 'vault/' + this.wsID), { 
+                set(ref(db, 'vaults/' + VAULT_ID), { 
                     tasks: this.tasks, 
                     projects: this.projects, 
                     priorities: this.prioritiesArr 
@@ -134,13 +126,10 @@
             render: function() {
                 const main = document.getElementById('main-content');
                 main.innerHTML = '';
-                
-                // Update Nav Colors
                 document.getElementById('btn-project').style.color = (this.viewMode === 'project') ? 'var(--accent-orange)' : '#d1d5db';
                 document.getElementById('btn-priority').style.color = (this.viewMode === 'priority') ? 'var(--accent-orange)' : '#d1d5db';
 
                 const colList = (this.viewMode === 'project') ? this.projects : this.prioritiesArr;
-                
                 colList.forEach(col => {
                     const columnTasks = this.tasks.filter(t => this.viewMode === 'project' ? t.project === col : t.priority === col)
                         .sort((a, b) => this.viewMode === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
@@ -148,7 +137,6 @@
                     const wrapper = document.createElement('div');
                     wrapper.className = "column-wrapper";
                     wrapper.dataset.colname = col;
-
                     const label = (this.viewMode === 'project') ? col : {red:'TODAY', orange:'THIS WEEK', yellow:'SOON', blue:'SOMEDAY'}[col];
                     
                     wrapper.innerHTML = `
@@ -168,7 +156,7 @@
                                         ${isEditing ? `<textarea id="edit-${task.id}" onblur="app.exitEdit('${task.id}', this.value)">${task.text}</textarea>` 
                                         : `<p class="text-[14px] font-bold leading-snug pr-6 cursor-text">${task.text}</p>`}
                                     </div>
-                                    <button onclick="app.openPopup('${task.id}')" class="absolute top-4 right-4 text-xl" style="color:var(${starColor})">★</button>
+                                    <button onclick="app.openPopup('${task.id}')" class="absolute top-4 right-4 text-xl transition" style="color:var(${starColor})">★</button>
                                     <div class="mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest ${isEditing ? 'pl-8' : ''}">
                                         ${this.viewMode === 'project' ? labelPriority(task.priority) : task.project}
                                     </div>
@@ -176,10 +164,8 @@
                             }).join('')}
                         </div>
                         <button onclick="app.addTask('${col}', 'bottom')" class="btn-add mt-1 mb-4">+</button>`;
-                    
                     main.appendChild(wrapper);
 
-                    // Initialize Sortable for tasks
                     if (!this.editingId) {
                         new Sortable(wrapper.querySelector('.kanban-column'), {
                             group: 'tasks', animation: 150, delay: 100, delayOnTouchOnly: true,
@@ -204,7 +190,6 @@
                     main.appendChild(addCol);
                 }
 
-                // Initialize Sortable for columns
                 new Sortable(main, { handle: '.handle', animation: 200, delay: 100, delayOnTouchOnly: true,
                     onEnd: () => {
                         const newOrder = Array.from(main.querySelectorAll('.column-wrapper')).map(w => w.dataset.colname).filter(n => n);
@@ -212,14 +197,9 @@
                         this.save();
                     }
                 });
-
-                if (this.editingId) { 
-                    const el = document.getElementById(`edit-${this.editingId}`); 
-                    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } 
-                }
+                if (this.editingId) { const el = document.getElementById(`edit-${this.editingId}`); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
             },
 
-            // --- USER ACTIONS ---
             toggleView: function(m) { this.viewMode = m; this.render(); },
             openPopup: function(id) { this.activeTaskId = id; document.getElementById('priority-popup').classList.remove('hidden'); },
             closePopup: function() { document.getElementById('priority-popup').classList.add('hidden'); },
@@ -229,12 +209,12 @@
                     task.priority = color;
                     const samePrio = this.tasks.filter(t => t.priority === color && t.id !== task.id).sort((a,b) => (a.prioOrder||0)-(b.prioOrder||0));
                     samePrio.forEach((t, i) => t.prioOrder = i + 1);
-                    task.prioOrder = 0; // Always top
+                    task.prioOrder = 0; 
                 }
                 this.closePopup(); this.save();
             },
             addTask: function(col, pos) {
-                const val = prompt("Task:");
+                const val = prompt("New Task:");
                 if (!val) return;
                 const newTask = { id: Date.now().toString(), text: val, project: (this.viewMode==='project'?col:this.projects[0]), priority: (this.viewMode==='priority'?col:'blue'), pOrder: 0, prioOrder: 0 };
                 const colTasks = this.tasks.filter(t => this.viewMode === 'project' ? t.project === col : t.priority === col).sort((a,b)=>(this.viewMode==='project'?a.pOrder-b.pOrder:a.prioOrder-b.prioOrder));
@@ -250,7 +230,7 @@
                 if (t && txt.trim()) { t.text = txt.trim(); this.save(); } else this.render();
             },
             deleteTask: function(id) { if(confirm("Delete?")) { this.tasks = this.tasks.filter(t => t.id !== id); this.editingId = null; this.save(); }},
-            addProject: function() { const n = prompt("Name:"); if (n) { this.projects.push(n); this.save(); }},
+            addProject: function() { const n = prompt("Project Name:"); if (n) { this.projects.push(n); this.save(); }},
             renameProject: function(old) { 
                 if (this.viewMode !== 'project') return;
                 const n = prompt("Rename:", old); 
@@ -263,22 +243,15 @@
                     this.projects = this.projects.filter(p => p !== n); this.save();
                 }
             },
-            exit: function() { localStorage.removeItem('task_master_pwd'); window.location.reload(); }
-        };
-
-        window.handleAccess = () => {
-            const pwd = document.getElementById('pass-input').value.trim();
-            if (pwd.length < 4) return alert("Enter a longer password.");
-            app.wsID = pwd;
-            localStorage.setItem('task_master_pwd', pwd);
-            app.init();
+            exportData: () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.app.tasks));
+                const dl = document.createElement('a'); dl.setAttribute("href", dataStr); dl.setAttribute("download", "tasks.json"); dl.click();
+            }
         };
 
         function labelPriority(c) { return {red:'TODAY', orange:'THIS WEEK', yellow:'SOON', blue:'SOMEDAY'}[c] || c; }
 
-        // Start app
         app.init();
-        document.getElementById('system-log').innerText = "V1.2 Active";
     </script>
 </body>
 </html>
