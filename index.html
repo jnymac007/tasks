@@ -14,13 +14,13 @@
         body { font-family: -apple-system, sans-serif; background-color: var(--ui-bg); color: #f8fafc; overscroll-behavior: none; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         nav { height: 80px; flex-shrink: 0; }
         
-        /* Main board layout */
+        /* Layout */
         #main-content { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; flex-grow: 1; height: calc(100vh - 80px); }
         .column-wrapper { flex: 0 0 85vw; padding: 0 12px; scroll-snap-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); display: flex; flex-direction: column; height: 100%; }
         .column-wrapper:nth-child(even) { background-color: var(--ui-shading); }
         @media (min-width: 768px) { .column-wrapper { flex: 0 0 320px; scroll-snap-align: start; } }
         
-        /* Independent List Scrolling */
+        /* Column Scrolling */
         .kanban-column { flex-grow: 1; overflow-y: auto; overflow-x: hidden; padding-right: 2px; margin-bottom: 4px; -webkit-overflow-scrolling: touch; }
         .kanban-column::-webkit-scrollbar { width: 3px; }
         .kanban-column::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
@@ -33,10 +33,12 @@
         .btn-add { width: 100%; padding: 6px; font-size: 24px; font-weight: 300; color: rgba(255,255,255,0.15); border-radius: 0.75rem; transition: all 0.2s; line-height: 1; flex-shrink: 0; }
         .btn-add:hover { color: var(--accent-orange); }
         
+        /* UI Components */
         .glass { background: rgba(49, 49, 49, 0.9); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.05); }
         .sortable-ghost { opacity: 0.1 !important; background: #94a3b8 !important; border-radius: 1rem; }
 
-        #lock-screen { position: fixed; inset: 0; z-index: 200; background: var(--ui-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        /* Lock Screen - Explicit Visibility */
+        #lock-screen { position: fixed; inset: 0; z-index: 9999; background: var(--ui-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
         .version-badge { background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.3); padding: 4px 12px; border-radius: 99px; font-size: 10px; font-weight: 800; letter-spacing: 1px; margin-top: 10px; }
     </style>
 </head>
@@ -44,8 +46,199 @@
 
     <!-- LOCK SCREEN -->
     <div id="lock-screen">
-        <h1 class="text-[#d1d5db] text-[18px] font-black tracking-[0.5em] uppercase">Private Vault</h1>
-        <div class="version-badge">VERSION 1.5.0</div>
+        <h1 class="text-[#d1d5db] text-[20px] font-black tracking-[0.5em] uppercase">Private Vault</h1>
+        <div class="version-badge">VERSION 1.6.0</div>
         
-        <div class="flex flex-col gap-4 w-72 mt-10">
-            <input type="password" id="vault-pas
+        <div class="flex flex-col gap-4 w-72 mt-12">
+            <input type="password" id="vault-pass-field" placeholder="Enter Master Key" 
+                   class="bg-[#3d3d3d] border-2 border-white/5 rounded-full px-6 py-4 text-white text-center text-lg outline-none focus:border-[#FF8C00] transition-all">
+            
+            <button id="btn-unlock-trigger" 
+                    class="bg-[#FF8C00] text-white py-4 rounded-full font-bold text-sm tracking-widest uppercase shadow-xl hover:bg-orange-600 active:scale-95 transition-all">
+                Access Data
+            </button>
+        </div>
+        
+        <p id="boot-log" class="text-white/10 text-[10px] mt-12 uppercase tracking-[0.3em]">System Standing By</p>
+    </div>
+
+    <!-- MAIN APP CONTENT -->
+    <div id="app-content" class="hidden h-full flex flex-col">
+        <nav class="flex justify-between items-center px-8 py-4 glass z-50">
+            <div class="flex flex-col">
+                <h1 class="text-[14px] font-black tracking-[0.3em] uppercase text-[#d1d5db] mb-1">Task Manager</h1>
+                <div class="flex gap-6">
+                    <button id="nav-btn-project" class="text-[14px] font-bold uppercase transition">Projects</button>
+                    <button id="nav-btn-priority" class="text-[14px] font-bold uppercase transition">Priorities</button>
+                </div>
+            </div>
+            <button id="nav-btn-lock" class="text-[10px] font-black text-[#d1d5db] uppercase tracking-widest hover:text-[#FF8C00]">Lock Vault</button>
+        </nav>
+        <div id="main-content"></div>
+    </div>
+
+    <!-- PRIORITY PICKER POPUP -->
+    <div id="priority-popup" class="hidden fixed inset-0 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center z-[100]">
+        <div class="w-full sm:w-80 bg-[#313131] p-8 rounded-t-[2.5rem] sm:rounded-[3rem] border border-white/5 text-center shadow-2xl">
+            <div id="prio-list-container" class="flex flex-col gap-2"></div>
+            <button id="btn-prio-cancel" class="mt-8 text-[12px] font-bold text-gray-400 uppercase tracking-widest text-center w-full">Cancel</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCRSI7mZQDo6WiECYM4Cbh3ZEOZjnH6YaU",
+            authDomain: "my-tasks-319e9.firebaseapp.com",
+            databaseURL: "https://my-tasks-319e9-default-rtdb.firebaseio.com",
+            projectId: "my-tasks-319e9",
+            storageBucket: "my-tasks-319e9.firebasestorage.app",
+            messagingSenderId: "789706458775",
+            appId: "1:789706458775:web:bf61fcdba5d9cbf59f4bd2"
+        };
+
+        const fbApp = initializeApp(firebaseConfig);
+        const db = getDatabase(fbApp);
+
+        // Global App Object
+        window.TM = {
+            key: localStorage.getItem('tm_v160_key') || "",
+            tasks: [],
+            projects: ["Inbox"],
+            priorities: ["red", "orange", "yellow", "blue"],
+            view: 'project',
+            activeTask: null,
+            editing: null,
+
+            save: function() {
+                if (!this.key) return;
+                set(ref(db, 'vaults/' + this.key), { 
+                    tasks: this.tasks, projects: this.projects, priorities: this.priorities 
+                });
+            },
+
+            init: function() {
+                if (!this.key) return;
+                document.getElementById('lock-screen').style.display = 'none';
+                document.getElementById('app-content').classList.remove('hidden');
+                
+                const dataRef = ref(db, 'vaults/' + this.key);
+                onValue(dataRef, (snap) => {
+                    const d = snap.val();
+                    if (d) {
+                        this.tasks = d.tasks || [];
+                        this.projects = d.projects || ["Inbox"];
+                        this.priorities = d.priorities || ["red", "orange", "yellow", "blue"];
+                        this.render();
+                    } else { this.save(); }
+                });
+            },
+
+            render: function() {
+                const main = document.getElementById('main-content');
+                if(!main) return;
+                main.innerHTML = '';
+
+                document.getElementById('nav-btn-project').style.color = (this.view === 'project') ? 'var(--accent-orange)' : '#d1d5db';
+                document.getElementById('nav-btn-priority').style.color = (this.view === 'priority') ? 'var(--accent-orange)' : '#d1d5db';
+
+                const cols = (this.view === 'project') ? this.projects : this.priorities;
+                
+                cols.forEach(col => {
+                    const filteredTasks = this.tasks.filter(t => this.view === 'project' ? t.project === col : t.priority === col)
+                        .sort((a, b) => this.view === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
+
+                    const wrap = document.createElement('div');
+                    wrap.className = "column-wrapper";
+                    wrap.dataset.colname = col;
+
+                    const label = (this.view === 'project') ? col : {red:'TODAY', orange:'WEEK', yellow:'SOON', blue:'SOMEDAY'}[col];
+
+                    wrap.innerHTML = `
+                        <div class="flex items-center justify-between mb-1 mt-3 px-1 handle cursor-grab flex-shrink-0">
+                            <h2 class="list-label title-click" data-col="${col}">${label}</h2>
+                            ${this.view === 'project' ? `<button class="text-gray-500 text-sm px-1 proj-del" data-col="${col}">×</button>` : ''}
+                        </div>
+                        <button class="btn-add mb-1 add-at-pos" data-col="${col}" data-pos="top">+</button>
+                        <div class="kanban-column" data-col="${col}">
+                            ${filteredTasks.map(t => {
+                                const isEdit = this.editing === t.id;
+                                const star = {red:'--star-red', orange:'--star-orange', yellow:'--star-yellow', blue:'--star-blue'}[t.priority];
+                                return `
+                                <div data-id="${t.id}" class="card ${isEdit ? 'ring-2 ring-orange-500/30' : ''}">
+                                    ${isEdit ? `<button class="absolute top-4 left-4 text-gray-400 del-task" data-id="${t.id}">🗑️</button>` : ''}
+                                    <div class="${isEdit ? 'pl-8' : ''} trigger-edit" data-id="${t.id}">
+                                        ${isEdit ? `<textarea id="edit-${t.id}">${t.text}</textarea>` : `<p class="text-[14px] font-bold leading-snug pr-6 cursor-text">${t.text}</p>`}
+                                    </div>
+                                    <button class="absolute top-4 right-4 text-xl open-prio" data-id="${t.id}" style="color:var(${star})">★</button>
+                                    <div class="mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest ${isEdit ? 'pl-8' : ''}">
+                                        ${this.view === 'project' ? ({red:'TODAY', orange:'WEEK', yellow:'SOON', blue:'SOMEDAY'}[t.priority]) : t.project}
+                                    </div>
+                                </div>`;
+                            }).join('')}
+                        </div>
+                        <button class="btn-add mt-1 mb-4 add-at-pos" data-col="${col}" data-pos="bottom">+</button>`;
+                    main.appendChild(wrap);
+
+                    new Sortable(wrap.querySelector('.kanban-column'), {
+                        group: 'tasks', animation: 150, delay: 150, delayOnTouchOnly: true,
+                        onEnd: (e) => {
+                            const task = this.tasks.find(t => t.id === e.item.dataset.id);
+                            if (this.view === 'project') task.project = e.to.dataset.col; else task.priority = e.to.dataset.col;
+                            const ids = Array.from(e.to.querySelectorAll('.card')).map(el => el.dataset.id);
+                            this.tasks.forEach(t => {
+                                const idx = ids.indexOf(t.id);
+                                if (idx !== -1) { if (this.view === 'project') t.pOrder = idx; else t.prioOrder = idx; }
+                            });
+                            this.save();
+                        }
+                    });
+                });
+
+                if (this.view === 'project') {
+                    const b = document.createElement('div');
+                    b.className = "column-wrapper flex items-center justify-center";
+                    b.innerHTML = `<button id="create-proj-btn" class="w-full h-24 border border-dashed border-white/10 rounded-2xl text-gray-500 font-black text-[11px] tracking-widest uppercase hover:text-orange-500 transition mb-10">+ Project</button>`;
+                    main.appendChild(b);
+                    document.getElementById('create-proj-btn').onclick = () => { const n = prompt("Project Name:"); if(n) { this.projects.push(n); this.save(); }};
+                }
+
+                new Sortable(main, { handle: '.handle', animation: 200, delay: 150, delayOnTouchOnly: true,
+                    onEnd: () => {
+                        const newOrder = Array.from(main.querySelectorAll('.column-wrapper')).map(w => w.dataset.colname).filter(n => n);
+                        if (this.view === 'project') this.projects = newOrder; else this.priorities = newOrder;
+                        this.save();
+                    }
+                });
+
+                if (this.editing) {
+                    const el = document.getElementById(`edit-${this.editing}`);
+                    if (el) {
+                        el.focus(); el.setSelectionRange(el.value.length, el.value.length);
+                        el.onblur = () => { const txt = el.value.trim(); if(txt) this.tasks.find(t=>t.id===this.editing).text = txt; this.editing = null; this.save(); };
+                    }
+                }
+                this.bindClicks();
+            },
+
+            bindClicks: function() {
+                document.querySelectorAll('.add-at-pos').forEach(b => b.onclick = () => {
+                    const val = prompt("New Task:"); if(!val) return;
+                    const newTask = { id: Date.now().toString(), text: val, project: (this.view==='project'?b.dataset.col:this.projects[0]), priority: (this.view==='priority'?b.dataset.col:'blue'), pOrder: 0, prioOrder: 0 };
+                    const colTasks = this.tasks.filter(t => this.view === 'project' ? t.project === b.dataset.col : t.priority === b.dataset.col).sort((a,b)=>(this.view==='project'?(a.pOrder||0)-(b.pOrder||0):(a.prioOrder||0)-(b.prioOrder||0)));
+                    if (b.dataset.pos === 'top') colTasks.unshift(newTask); else colTasks.push(newTask);
+                    colTasks.forEach((t, i) => { if (this.view === 'project') t.pOrder = i; else t.prioOrder = i; });
+                    const others = this.tasks.filter(t => this.view === 'project' ? t.project !== b.dataset.col : t.priority !== b.dataset.col);
+                    this.tasks = [...others, ...colTasks]; this.save();
+                });
+                document.querySelectorAll('.open-prio').forEach(b => b.onclick = () => { this.activeTask = b.dataset.id; document.getElementById('priority-popup').classList.remove('hidden'); });
+                document.querySelectorAll('.trigger-edit').forEach(b => b.onclick = () => { this.editing = b.dataset.id; this.render(); });
+                document.querySelectorAll('.del-task').forEach(b => b.onclick = () => { if(confirm("Delete?")) { this.tasks = this.tasks.filter(t => t.id !== b.dataset.id); this.editing = null; this.save(); }});
+                document.querySelectorAll('.title-click').forEach(b => b.onclick = () => {
+                    if (this.view !== 'project') return;
+                    const n = prompt("Rename:", b.dataset.col);
+                    if (n) { this.projects = this.projects.map(p => p===b.dataset.col?n:p); this.tasks.forEach(t => { if(t.project===b.dataset.col) t.project=n; }); this.save(); }
+                });
+                document.querySelectorAll('.proj-del').forEach(b => b.onclick = () => {
