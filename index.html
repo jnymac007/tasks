@@ -33,15 +33,16 @@
 </head>
 <body>
 
+    <!-- Login Screen -->
     <div id="login-screen">
         <h1 class="text-[#d1d5db] text-[14px] font-black tracking-[0.4em] uppercase mb-8">Task Manager</h1>
         <button id="login-btn" onclick="login()" class="bg-[#FF8C00] text-white px-10 py-4 rounded-full font-bold text-xs tracking-widest uppercase shadow-xl hover:bg-orange-600 transition">
             Sign in with Google
         </button>
-        <p id="status-msg" class="text-[#FF8C00] text-[10px] mt-8 uppercase font-bold tracking-widest text-center px-6 leading-relaxed opacity-80">Ready</p>
-        <button id="force-init" onclick="window.save()" class="hidden mt-4 text-[10px] text-white/20 uppercase tracking-widest border border-white/10 px-4 py-2 rounded">Force Connection</button>
+        <p id="status-msg" class="text-[#FF8C00] text-[10px] mt-8 uppercase font-bold tracking-widest text-center px-6 leading-relaxed opacity-80">System Check...</p>
     </div>
 
+    <!-- App Content -->
     <div id="app-content" class="hidden h-full flex flex-col">
         <nav class="flex justify-between items-center px-8 py-4 glass z-50">
             <div class="flex flex-col">
@@ -56,13 +57,22 @@
         <div id="main-content"></div>
     </div>
 
+    <!-- Priority Popup -->
     <div id="priority-popup" class="hidden fixed inset-0 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center z-[100]">
         <div class="w-full sm:w-80 bg-[#313131] p-8 rounded-t-[2.5rem] sm:rounded-[3rem] border border-white/5 text-center shadow-2xl">
             <div class="flex flex-col gap-2">
-                <button onclick="setPriority('red')" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left"><span class="text-3xl star-red">★</span><div class="text-[12px] font-black text-red-500 uppercase">Today</div></button>
-                <button onclick="setPriority('orange')" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left"><span class="text-3xl star-orange">★</span><div class="text-[12px] font-black text-orange-500 uppercase">This Week</div></button>
-                <button onclick="setPriority('yellow')" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left"><span class="text-3xl star-yellow">★</span><div class="text-[12px] font-black text-yellow-500 uppercase">Soon</div></button>
-                <button onclick="setPriority('blue')" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left"><span class="text-3xl star-blue">★</span><div class="text-[12px] font-black text-blue-500 uppercase">Someday</div></button>
+                <button onclick="setPriority('red')" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left">
+                    <span class="text-3xl star-red">★</span><div class="text-[12px] font-black text-red-500 uppercase">Today</div>
+                </button>
+                <button onclick="setPriority('orange')" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left">
+                    <span class="text-3xl star-orange">★</span><div class="text-[12px] font-black text-orange-500 uppercase">This Week</div>
+                </button>
+                <button onclick="setPriority('yellow')" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left">
+                    <span class="text-3xl star-yellow">★</span><div class="text-[12px] font-black text-yellow-500 uppercase">Soon</div>
+                </button>
+                <button onclick="setPriority('blue')" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left">
+                    <span class="text-3xl star-blue">★</span><div class="text-[12px] font-black text-blue-500 uppercase">Someday</div>
+                </button>
             </div>
             <button onclick="closePopup()" class="mt-8 text-[12px] font-bold text-gray-400 uppercase tracking-widest text-center w-full">Close</button>
         </div>
@@ -70,96 +80,118 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // CONFIG
         const firebaseConfig = {
             apiKey: "AIzaSyCRSI7mZQDo6WiECYM4Cbh3ZEOZjnH6YaU",
             authDomain: "my-tasks-319e9.firebaseapp.com",
-            databaseURL: "https://my-tasks-319e9-default-rtdb.firebaseio.com", 
+            databaseURL: "https://my-tasks-319e9-default-rtdb.firebaseio.com", // Ensure this matches Step 1
             projectId: "my-tasks-319e9",
             storageBucket: "my-tasks-319e9.firebasestorage.app",
             messagingSenderId: "789706458775",
-            appId: "1:789706458775:web:bf61fcdba5d9cbf59f4bd2"
+            appId: "1:789706458775:web:bf61fcdba5d9cbf59f4bd2",
+            measurementId: "G-WLKSCG3P1D"
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
         const auth = getAuth(app);
         const provider = new GoogleAuthProvider();
-        const rootRef = ref(db, "/"); // POINTING TO ROOT FOR MAXIMUM COMPATIBILITY
+        const tasksRef = ref(db, 'tasks_data');
 
         let tasks = [], projects = ["Inbox"], prioritiesArr = ["red", "orange", "yellow", "blue"];
         let viewMode = 'project', activeTaskId = null, editingId = null;
 
         function updateStatus(msg) {
-            console.log(msg);
-            document.getElementById('status-msg').innerText = msg;
+            console.log("[Status]: " + msg);
+            const el = document.getElementById('status-msg');
+            if (el) el.innerText = msg;
         }
 
-        // --- AUTH ---
+        // --- AUTH CONTROLLER ---
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                if (user.email.toLowerCase() === "jnymac@gmail.com") {
-                    updateStatus("Login Verified. Accessing Cloud...");
-                    initSync();
+                const userEmail = user.email.toLowerCase().trim();
+                if (userEmail === "jnymac@gmail.com") {
+                    updateStatus("Verified. Testing Database Connection...");
+                    initDataSync();
                 } else {
-                    updateStatus("Denied: " + user.email);
+                    updateStatus("Denied: " + userEmail);
                     setTimeout(() => signOut(auth), 3000);
                 }
             } else {
+                updateStatus("Please sign in with jnymac@gmail.com");
                 document.getElementById('login-screen').classList.remove('hidden');
                 document.getElementById('app-content').classList.add('hidden');
             }
         });
 
-        window.login = () => signInWithPopup(auth, provider).catch(e => updateStatus("Auth Error: " + e.code));
+        window.login = () => {
+            updateStatus("Redirecting...");
+            signInWithPopup(auth, provider).catch(e => updateStatus("Auth Error: " + e.code));
+        };
+
         window.logout = () => signOut(auth);
 
-        // --- SYNC ---
-        function initSync() {
-            // Show force button after 4 seconds of hanging
-            setTimeout(() => { if (tasks.length === 0) document.getElementById('force-init').classList.remove('hidden'); }, 4000);
-
-            onValue(rootRef, (snap) => {
-                const data = snap.val();
+        // --- DATABASE SYNC ---
+        function initDataSync() {
+            // First, try a one-time 'get' to see if permissions work
+            get(tasksRef).then((snapshot) => {
+                updateStatus("Database connected. Rendering...");
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('app-content').classList.remove('hidden');
                 
-                if (data && data.tasks) {
-                    tasks = data.tasks;
+                const data = snapshot.val();
+                if (data) {
+                    tasks = data.tasks || [];
                     projects = data.projects || ["Inbox"];
                     prioritiesArr = data.priorities || ["red", "orange", "yellow", "blue"];
                     window.render();
                 } else {
-                    updateStatus("Cloud empty. Initializing...");
-                    window.save();
+                    window.save(); // Initialize empty DB
                 }
-            }, (err) => {
-                updateStatus("Permission Denied. Set Database Rules to: { \".read\": \"auth != null\", \".write\": \"auth != null\" }");
+
+                // Now start realtime listener
+                onValue(tasksRef, (snap) => {
+                    const d = snap.val();
+                    if (d) {
+                        tasks = d.tasks || [];
+                        projects = d.projects || ["Inbox"];
+                        prioritiesArr = d.priorities || ["red", "orange", "yellow", "blue"];
+                        window.render();
+                    }
+                });
+
+            }).catch((error) => {
+                updateStatus("DB Error: " + error.code + " - " + error.message);
+                console.error(error);
             });
         }
 
-        window.save = () => set(rootRef, { tasks, projects, priorities: prioritiesArr });
+        window.save = () => set(tasksRef, { tasks, projects, priorities: prioritiesArr });
 
-        // --- UI ---
+        // --- UI RENDERER ---
         window.render = function() {
             const main = document.getElementById('main-content');
+            if(!main) return;
             main.innerHTML = '';
             updateNav();
+
             const colList = viewMode === 'project' ? projects : prioritiesArr;
             colList.forEach(col => {
                 const columnTasks = tasks.filter(t => viewMode === 'project' ? t.project === col : t.priority === col)
                     .sort((a, b) => viewMode === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
+
                 const wrapper = document.createElement('div');
                 wrapper.className = "column-wrapper";
                 wrapper.dataset.colname = col;
+
                 const label = viewMode === 'project' ? col : getPriorityLabel(col);
                 wrapper.innerHTML = `
                     <div class="flex items-center justify-between mb-1 mt-3 px-1 handle cursor-grab flex-shrink-0">
                         <h2 onclick="${viewMode === 'project' ? `renameProject('${col}')` : ''}" class="list-label">${label}</h2>
-                        ${viewMode === 'project' ? `<button onclick="deleteProject('${col}')" class="text-gray-500 text-lg hover:text-red-400 px-1">×</button>` : ''}
+                        ${viewMode === 'project' ? `<button onclick="deleteProject('${col}')" class="text-gray-500 text-sm hover:text-red-400 px-1">×</button>` : ''}
                     </div>
                     <button onclick="addTaskAtPos('${col}', 'top')" class="btn-add mb-1">+</button>
                     <div class="kanban-column" data-col="${col}">
@@ -181,6 +213,7 @@
                     </div>
                     <button onclick="addTaskAtPos('${col}', 'bottom')" class="btn-add mt-1 mb-4">+</button>`;
                 main.appendChild(wrapper);
+
                 if (!editingId) {
                     new Sortable(wrapper.querySelector('.kanban-column'), {
                         group: 'tasks', animation: 200, ghostClass: 'sortable-ghost', delay: 150, delayOnTouchOnly: true,
@@ -188,6 +221,7 @@
                     });
                 }
             });
+
             if (viewMode === 'project') {
                 const addCol = document.createElement('div');
                 addCol.className = "column-wrapper flex items-center justify-center";
