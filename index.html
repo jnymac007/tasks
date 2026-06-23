@@ -84,192 +84,226 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCRSI7mZQDo6WiECYM4Cbh3ZEOZjnH6YaU",
-            authDomain: "my-tasks-319e9.firebaseapp.com",
-            projectId: "my-tasks-319e9",
-            storageBucket: "my-tasks-319e9.firebasestorage.app",
-            messagingSenderId: "789706458775",
-            appId: "1:789706458775:web:bf61fcdba5d9cbf59f4bd2",
-            measurementId: "G-WLKSCG3P1D"
-        };
+    const firebaseConfig = {
+        apiKey: "AIzaSyCRSI7mZQDo6WiECYM4Cbh3ZEOZjnH6YaU",
+        authDomain: "my-tasks-319e9.firebaseapp.com",
+        projectId: "my-tasks-319e9",
+        storageBucket: "my-tasks-319e9.firebasestorage.app",
+        messagingSenderId: "789706458775",
+        appId: "1:789706458775:web:bf61fcdba5d9cbf59f4bd2",
+        measurementId: "G-WLKSCG3P1D"
+    };
 
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const auth = getAuth(app);
-        const provider = new GoogleAuthProvider();
-        const tasksRef = ref(db, 'tasks_data');
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
+    const tasksRef = ref(db, 'tasks_data');
 
-        let tasks = [], projects = ["Inbox"], prioritiesArr = ["red", "orange", "yellow", "blue"];
-        let viewMode = 'project', activeTaskId = null, editingId = null;
+    let tasks = [], projects = ["Inbox"], prioritiesArr = ["red", "orange", "yellow", "blue"];
+    let viewMode = 'project', activeTaskId = null, editingId = null;
 
-        // AUTH LOGIC
-        onAuthStateChanged(auth, (user) => {
-            if (user && user.email === "jnymac@gmail.com") {
+    // --- LOG-IN GATEKEEPER ---
+    onAuthStateChanged(auth, (user) => {
+        const errorEl = document.getElementById('error-msg');
+        
+        if (user) {
+            // Check email (case-insensitive and trimmed)
+            const userEmail = user.email.toLowerCase().trim();
+            const allowedEmail = "jnymac@gmail.com".toLowerCase().trim();
+
+            if (userEmail === allowedEmail) {
+                console.log("Access Granted");
+                errorEl.innerText = "";
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('app-content').classList.remove('hidden');
                 initDataSync();
-            } else if (user) {
-                document.getElementById('error-msg').innerText = "Access Denied: Restricted to jnymac@gmail.com";
-                signOut(auth);
             } else {
-                document.getElementById('login-screen').classList.remove('hidden');
-                document.getElementById('app-content').classList.add('hidden');
+                console.log("Access Denied for:", userEmail);
+                errorEl.innerText = "ACCESS DENIED: " + userEmail + " is not authorized.";
+                setTimeout(() => signOut(auth), 2000); 
+            }
+        } else {
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('app-content').classList.add('hidden');
+        }
+    });
+
+    window.login = () => {
+        signInWithPopup(auth, provider)
+            .then((result) => {
+                console.log("Login Success");
+            })
+            .catch((error) => {
+                console.error("Login Error:", error.code);
+                document.getElementById('error-msg').innerText = "Auth Error: " + error.code;
+            });
+    };
+
+    window.logout = () => signOut(auth);
+
+    // --- DATA SYNC ---
+    function initDataSync() {
+        onValue(tasksRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                tasks = data.tasks || [];
+                projects = data.projects || ["Inbox"];
+                prioritiesArr = data.priorities || ["red", "orange", "yellow", "blue"];
+                window.render();
+            }
+        });
+    }
+
+    window.save = () => set(tasksRef, { tasks, projects, priorities: prioritiesArr });
+
+    // --- RENDERING ENGINE ---
+    window.render = function() {
+        const main = document.getElementById('main-content');
+        if(!main) return;
+        main.innerHTML = '';
+        updateNav();
+
+        const colList = viewMode === 'project' ? projects : prioritiesArr;
+        
+        colList.forEach(col => {
+            const columnTasks = tasks.filter(t => viewMode === 'project' ? t.project === col : t.priority === col)
+                .sort((a, b) => viewMode === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
+
+            const wrapper = document.createElement('div');
+            wrapper.className = "column-wrapper";
+            wrapper.dataset.colname = col;
+
+            const label = viewMode === 'project' ? col : getPriorityLabel(col);
+            
+            wrapper.innerHTML = `
+                <div class="flex items-center justify-between mb-1 mt-3 px-1 handle cursor-grab flex-shrink-0">
+                    <h2 onclick="${viewMode === 'project' ? `renameProject('${col}')` : ''}" class="list-label">${label}</h2>
+                    ${viewMode === 'project' ? `<button onclick="deleteProject('${col}')" class="text-gray-400 text-lg hover:text-red-400 px-1">×</button>` : ''}
+                </div>
+                <button onclick="addTaskAtPos('${col}', 'top')" class="btn-add mb-1">+</button>
+                <div class="kanban-column" data-col="${col}">
+                    ${columnTasks.map(task => {
+                        const isEditing = editingId === task.id;
+                        return `
+                        <div data-id="${task.id}" class="card ${isEditing ? 'ring-2 ring-orange-500/30' : ''}">
+                            ${isEditing ? `<button onclick="deleteTask('${task.id}')" class="absolute top-4 left-4 text-gray-400 hover:text-red-500">🗑️</button>` : ''}
+                            <div class="${isEditing ? 'pl-8' : ''}" onclick="enterEditMode('${task.id}')">
+                                ${isEditing ? `<textarea id="edit-${task.id}" onblur="exitEditMode('${task.id}', this.value)" onkeydown="if(event.key==='Enter'){this.blur(); event.preventDefault();}">${task.text}</textarea>` 
+                                : `<p class="text-[14px] font-bold leading-snug pr-6 cursor-text">${task.text}</p>`}
+                            </div>
+                            <button onclick="openPopup('${task.id}')" class="absolute top-4 right-4 text-xl star-${task.priority} transition">★</button>
+                            <div class="mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest ${isEditing ? 'pl-8' : ''}">
+                                ${viewMode === 'project' ? getPriorityLabel(task.priority) : task.project}
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+                <button onclick="addTaskAtPos('${col}', 'bottom')" class="btn-add mt-1 mb-4">+</button>`;
+            
+            main.appendChild(wrapper);
+
+            if (!editingId) {
+                new Sortable(wrapper.querySelector('.kanban-column'), {
+                    group: 'tasks', animation: 200, ghostClass: 'sortable-ghost', delay: 150, delayOnTouchOnly: true,
+                    onEnd: (e) => updateTaskPosition(e.item.dataset.id, e.to.dataset.col, e.to)
+                });
             }
         });
 
-        window.login = () => signInWithPopup(auth, provider).catch(e => alert(e.message));
-        window.logout = () => signOut(auth);
-
-        function initDataSync() {
-            onValue(tasksRef, (snapshot) => {
-                const data = snapshot.val();
-                if (data) {
-                    tasks = data.tasks || [];
-                    projects = data.projects || ["Inbox"];
-                    prioritiesArr = data.priorities || ["red", "orange", "yellow", "blue"];
-                    window.render();
-                }
-            });
+        if (viewMode === 'project') {
+            const addCol = document.createElement('div');
+            addCol.className = "column-wrapper flex items-center justify-center";
+            addCol.innerHTML = `<button onclick="addProject()" class="w-full h-24 border border-dashed border-white/10 rounded-2xl text-gray-500 font-black text-[11px] tracking-widest uppercase hover:text-orange-500 transition mb-10">+ Project</button>`;
+            main.appendChild(addCol);
         }
 
-        window.save = () => set(tasksRef, { tasks, projects, priorities: prioritiesArr });
+        initListSorting(main);
+        if (editingId) { const el = document.getElementById(`edit-${editingId}`); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
+    };
 
-        // RENDERING
-        window.render = function() {
-            const main = document.getElementById('main-content');
-            if(!main) return;
-            main.innerHTML = '';
-            updateNav();
-            const colList = viewMode === 'project' ? projects : prioritiesArr;
-            colList.forEach(col => {
-                const columnTasks = tasks.filter(t => viewMode === 'project' ? t.project === col : t.priority === col)
-                    .sort((a, b) => viewMode === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
-                const wrapper = document.createElement('div');
-                wrapper.className = "column-wrapper";
-                wrapper.dataset.colname = col;
-                const label = viewMode === 'project' ? col : getPriorityLabel(col);
-                wrapper.innerHTML = `
-                    <div class="flex items-center justify-between mb-1 mt-3 px-1 handle cursor-grab flex-shrink-0">
-                        <h2 onclick="${viewMode === 'project' ? `renameProject('${col}')` : ''}" class="list-label">${label}</h2>
-                        ${viewMode === 'project' ? `<button onclick="deleteProject('${col}')" class="text-gray-400 text-lg hover:text-red-400 px-1">×</button>` : ''}
-                    </div>
-                    <button onclick="addTaskAtPos('${col}', 'top')" class="btn-add mb-1">+</button>
-                    <div class="kanban-column" data-col="${col}">
-                        ${columnTasks.map(task => {
-                            const isEditing = editingId === task.id;
-                            return `
-                            <div data-id="${task.id}" class="card ${isEditing ? 'ring-2 ring-orange-500/30' : ''}">
-                                ${isEditing ? `<button onclick="deleteTask('${task.id}')" class="absolute top-4 left-4 text-gray-400 hover:text-red-500">🗑️</button>` : ''}
-                                <div class="${isEditing ? 'pl-8' : ''}" onclick="enterEditMode('${task.id}')">
-                                    ${isEditing ? `<textarea id="edit-${task.id}" onblur="exitEditMode('${task.id}', this.value)" onkeydown="if(event.key==='Enter'){this.blur(); event.preventDefault();}">${task.text}</textarea>` 
-                                    : `<p class="text-[14px] font-bold leading-snug pr-6 cursor-text">${task.text}</p>`}
-                                </div>
-                                <button onclick="openPopup('${task.id}')" class="absolute top-4 right-4 text-xl star-${task.priority} transition">★</button>
-                                <div class="mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest ${isEditing ? 'pl-8' : ''}">
-                                    ${viewMode === 'project' ? getPriorityLabel(task.priority) : task.project}
-                                </div>
-                            </div>`;
-                        }).join('')}
-                    </div>
-                    <button onclick="addTaskAtPos('${col}', 'bottom')" class="btn-add mt-1 mb-4">+</button>`;
-                main.appendChild(wrapper);
-                if (!editingId) {
-                    new Sortable(wrapper.querySelector('.kanban-column'), {
-                        group: 'tasks', animation: 200, ghostClass: 'sortable-ghost', delay: 150, delayOnTouchOnly: true,
-                        onEnd: (e) => updateTaskPosition(e.item.dataset.id, e.to.dataset.col, e.to)
-                    });
-                }
-            });
-            if (viewMode === 'project') {
-                const addCol = document.createElement('div');
-                addCol.className = "column-wrapper flex items-center justify-center";
-                addCol.innerHTML = `<button onclick="addProject()" class="w-full h-24 border border-dashed border-white/10 rounded-2xl text-gray-500 font-black text-[11px] tracking-widest uppercase hover:text-orange-500 transition mb-10">+ Project</button>`;
-                main.appendChild(addCol);
+    function initListSorting(main) {
+        new Sortable(main, { handle: '.handle', animation: 250, ghostClass: 'col-ghost', delay: 150, delayOnTouchOnly: true,
+            onEnd: () => {
+                const newOrder = Array.from(main.querySelectorAll('.column-wrapper')).map(w => w.dataset.colname).filter(n => n);
+                if (viewMode === 'project') projects = newOrder; else prioritiesArr = newOrder;
+                window.save();
             }
-            initListSorting(main);
-            if (editingId) { const el = document.getElementById(`edit-${editingId}`); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
-        };
+        });
+    }
 
-        function initListSorting(main) {
-            new Sortable(main, { handle: '.handle', animation: 250, ghostClass: 'col-ghost', delay: 150, delayOnTouchOnly: true,
-                onEnd: () => {
-                    const newOrder = Array.from(main.querySelectorAll('.column-wrapper')).map(w => w.dataset.colname).filter(n => n);
-                    if (viewMode === 'project') projects = newOrder; else prioritiesArr = newOrder;
-                    window.save();
-                }
-            });
-        }
+    function updateTaskPosition(id, col, container) {
+        const task = tasks.find(t => t.id === id);
+        if (!task) return;
+        if (viewMode === 'project') task.project = col; else task.priority = col;
+        const ids = Array.from(container.querySelectorAll('.card')).map(el => el.dataset.id);
+        tasks.forEach(t => { const idx = ids.indexOf(t.id); if (idx !== -1) { if (viewMode === 'project') t.pOrder = idx; else t.prioOrder = idx; } });
+        window.save();
+    }
 
-        function updateTaskPosition(id, col, container) {
-            const task = tasks.find(t => t.id === id);
-            if (!task) return;
-            if (viewMode === 'project') task.project = col; else task.priority = col;
-            const ids = Array.from(container.querySelectorAll('.card')).map(el => el.dataset.id);
-            tasks.forEach(t => { const idx = ids.indexOf(t.id); if (idx !== -1) { if (viewMode === 'project') t.pOrder = idx; else t.prioOrder = idx; } });
+    window.setPriority = (newColor) => {
+        const task = tasks.find(t => t.id === activeTaskId);
+        if (!task) return;
+        task.priority = newColor;
+        // Bump to top of priority list
+        const samePrioTasks = tasks.filter(t => t.priority === newColor && t.id !== task.id).sort((a, b) => (a.prioOrder || 0) - (b.prioOrder || 0));
+        samePrioTasks.forEach((t, i) => t.prioOrder = i + 1);
+        task.prioOrder = 0;
+        window.closePopup(); window.save();
+    };
+
+    window.addTaskAtPos = (col, pos) => {
+        const val = prompt(`Task for ${col}:`);
+        if (!val) return;
+        const colTasks = tasks.filter(t => viewMode === 'project' ? t.project === col : t.priority === col).sort((a, b) => viewMode === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
+        const newTask = { id: Date.now().toString(), text: val, project: viewMode === 'project' ? col : (projects[0] || "Inbox"), priority: viewMode === 'priority' ? col : "blue", pOrder: 0, prioOrder: 0 };
+        if (pos === 'top') colTasks.unshift(newTask); else colTasks.push(newTask);
+        colTasks.forEach((t, i) => { if (viewMode === 'project') t.pOrder = i; else t.prioOrder = i; });
+        const others = tasks.filter(t => viewMode === 'project' ? t.project !== col : t.priority !== col);
+        tasks = [...others, ...colTasks]; window.save();
+    };
+
+    window.toggleViewMode = (m) => { viewMode = m; window.render(); };
+    function updateNav() {
+        ['project', 'priority'].forEach(m => {
+            const btn = document.getElementById(`btn-${m}`);
+            if (btn) btn.style.color = (viewMode === m) ? 'var(--accent-orange)' : '#d1d5db';
+        });
+    }
+    function getPriorityLabel(c) { return { red:'TODAY', orange:'THIS WEEK', yellow:'SOON', blue:'SOMEDAY' }[c] || c; }
+    window.enterEditMode = (id) => { if (editingId === id) return; editingId = id; window.render(); };
+    window.exitEditMode = (id, txt) => {
+        editingId = null;
+        const t = tasks.find(x => x.id === id);
+        if (t && txt.trim()) { t.text = txt.trim(); window.save(); } else window.render();
+    };
+    window.deleteTask = (id) => { if(confirm("Delete Task?")){ tasks = tasks.filter(t => t.id !== id); editingId = null; window.save(); }};
+    window.openPopup = (id) => { activeTaskId = id; document.getElementById('priority-popup').classList.remove('hidden'); };
+    window.closePopup = () => document.getElementById('priority-popup').classList.add('hidden');
+    window.addProject = () => { const n = prompt("Project Name:"); if (n && !projects.includes(n)) { projects.push(n); window.save(); }};
+    window.renameProject = (old) => { 
+        const n = prompt("Rename to:", old); 
+        if (n && n !== old) { 
+            projects = projects.map(p => p === old ? n : p); 
+            tasks.forEach(t => { if (t.project === old) t.project = n; });
             window.save();
         }
-
-        window.setPriority = (newColor) => {
-            const task = tasks.find(t => t.id === activeTaskId);
-            if (!task) return;
-            task.priority = newColor;
-            const samePrioTasks = tasks.filter(t => t.priority === newColor && t.id !== task.id).sort((a, b) => (a.prioOrder || 0) - (b.prioOrder || 0));
-            samePrioTasks.forEach((t, i) => t.prioOrder = i + 1);
-            task.prioOrder = 0;
-            window.closePopup(); window.save();
-        };
-
-        window.addTaskAtPos = (col, pos) => {
-            const val = prompt(`Task for ${col}:`);
-            if (!val) return;
-            const colTasks = tasks.filter(t => viewMode === 'project' ? t.project === col : t.priority === col).sort((a, b) => viewMode === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
-            const newTask = { id: Date.now().toString(), text: val, project: viewMode === 'project' ? col : (projects[0] || "Inbox"), priority: viewMode === 'priority' ? col : "blue", pOrder: 0, prioOrder: 0 };
-            if (pos === 'top') colTasks.unshift(newTask); else colTasks.push(newTask);
-            colTasks.forEach((t, i) => { if (viewMode === 'project') t.pOrder = i; else t.prioOrder = i; });
-            const others = tasks.filter(t => viewMode === 'project' ? t.project !== col : t.priority !== col);
-            tasks = [...others, ...colTasks]; window.save();
-        };
-
-        window.toggleViewMode = (m) => { viewMode = m; window.render(); };
-        function updateNav() {
-            ['project', 'priority'].forEach(m => {
-                const btn = document.getElementById(`btn-${m}`);
-                if (btn) btn.style.color = (viewMode === m) ? 'var(--accent-orange)' : '#d1d5db';
-            });
+    };
+    window.deleteProject = (n) => {
+        if (projects.length <= 1) return;
+        if (confirm(`Delete ${n}?`)) {
+            const fb = projects[0] === n ? projects[1] : projects[0];
+            tasks.forEach(t => { if (t.project === n) t.project = fb; });
+            projects = projects.filter(p => p !== n);
+            window.save();
         }
-        function getPriorityLabel(c) { return { red:'TODAY', orange:'THIS WEEK', yellow:'SOON', blue:'SOMEDAY' }[c] || c; }
-        window.enterEditMode = (id) => { if (editingId === id) return; editingId = id; window.render(); };
-        window.exitEditMode = (id, txt) => {
-            editingId = null;
-            const t = tasks.find(x => x.id === id);
-            if (t && txt.trim()) { t.text = txt.trim(); window.save(); } else window.render();
-        };
-        window.deleteTask = (id) => { tasks = tasks.filter(t => t.id !== id); editingId = null; window.save(); };
-        window.openPopup = (id) => { activeTaskId = id; document.getElementById('priority-popup').classList.remove('hidden'); };
-        window.closePopup = () => document.getElementById('priority-popup').classList.add('hidden');
-        window.addProject = () => { const n = prompt("Project Name:"); if (n && !projects.includes(n)) { projects.push(n); window.save(); }};
-        window.renameProject = (old) => { 
-            const n = prompt("Rename to:", old); 
-            if (n && n !== old) { 
-                projects = projects.map(p => p === old ? n : p); 
-                tasks.forEach(t => { if (t.project === old) t.project = n; });
-                window.save();
-            }
-        };
-        window.deleteProject = (n) => {
-            if (projects.length <= 1) return;
-            if (confirm(`Delete ${n}?`)) {
-                const fb = projects[0] === n ? projects[1] : projects[0];
-                tasks.forEach(t => { if (t.project === n) t.project = fb; });
-                projects = projects.filter(p => p !== n);
-                window.save();
-            }
-        };
-    </script>
+    };
+</script>
+
+    
 </body>
 </html>
