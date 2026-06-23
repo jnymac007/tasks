@@ -13,56 +13,47 @@
         }
         body { font-family: -apple-system, sans-serif; background-color: var(--ui-bg); color: #f8fafc; overscroll-behavior: none; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         nav { height: 80px; flex-shrink: 0; }
-        
         #main-content { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; flex-grow: 1; height: calc(100vh - 80px); }
         .column-wrapper { flex: 0 0 85vw; padding: 0 12px; scroll-snap-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); display: flex; flex-direction: column; height: 100%; }
         .column-wrapper:nth-child(even) { background-color: var(--ui-shading); }
         @media (min-width: 768px) { .column-wrapper { flex: 0 0 300px; scroll-snap-align: start; } }
-        
         .kanban-column { flex-grow: 1; overflow-y: auto; overflow-x: hidden; padding-right: 2px; margin-bottom: 4px; -webkit-overflow-scrolling: touch; }
         .kanban-column::-webkit-scrollbar { width: 3px; }
         .kanban-column::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-
-        .card { background: #ffffff; border-radius: 1.25rem; padding: 1rem; margin-bottom: 0.75rem; box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.4); color: #1a1a1a; position: relative; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
+        .card { background: #ffffff; border-radius: 1.25rem; padding: 1.2rem; margin-bottom: 0.75rem; box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.4); color: #1a1a1a; position: relative; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
         textarea { background: transparent; border: none; outline: none; resize: none; width: 100%; font-family: inherit; font-size: 14px; font-weight: 600; color: #111827; padding: 0; margin: 0; user-select: text; }
-        
         .list-label { color: var(--accent-orange); font-size: 14px; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; }
         .btn-add { width: 100%; padding: 6px; font-size: 24px; font-weight: 300; color: rgba(255,255,255,0.15); border-radius: 0.75rem; transition: all 0.2s; line-height: 1; flex-shrink: 0; }
         .btn-add:hover { color: var(--accent-orange); }
-        
-        /* LOCK SCREEN STYLING */
         #lock-screen { position: fixed; inset: 0; z-index: 200; background: var(--ui-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
         .glass { background: rgba(49, 49, 49, 0.9); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.05); }
-        .star-blue { color: var(--star-blue); } .star-yellow { color: var(--star-yellow); } .star-orange { color: var(--star-orange); } .star-red { color: var(--star-red); }
     </style>
 </head>
 <body>
 
-    <!-- Lock Screen (Visible by default) -->
+    <!-- Access Screen -->
     <div id="lock-screen">
         <h1 class="text-[#d1d5db] text-[18px] font-black tracking-[0.5em] uppercase mb-10">Private Vault</h1>
         <div class="flex flex-col gap-4 w-72">
-            <input type="password" id="vault-password" placeholder="Enter Password" class="bg-[#3d3d3d] border border-white/10 rounded-full px-6 py-4 text-white text-center text-sm outline-none focus:border-[#FF8C00] transition-all shadow-inner">
-            <button onclick="app.unlock()" class="bg-[#FF8C00] text-white py-4 rounded-full font-bold text-xs tracking-widest uppercase shadow-xl hover:scale-105 transition-all">
+            <input type="password" id="vault-password" placeholder="Enter Password" class="bg-[#3d3d3d] border border-white/10 rounded-full px-6 py-4 text-white text-center text-sm outline-none focus:border-[#FF8C00] transition-all">
+            <button id="unlock-btn" class="bg-[#FF8C00] text-white py-4 rounded-full font-bold text-xs tracking-widest uppercase shadow-xl hover:scale-105 transition-all">
                 Access Data
             </button>
         </div>
-        <p class="text-white/10 text-[10px] mt-12 uppercase tracking-[0.3em]">Encrypted Real-Time Sync</p>
+        <p id="system-ready" class="text-white/10 text-[9px] mt-12 uppercase tracking-[0.3em]">Loading System...</p>
     </div>
 
-    <!-- App Content (Hidden until unlocked) -->
+    <!-- App Content -->
     <div id="app-content" class="hidden h-full flex flex-col">
         <nav class="flex justify-between items-center px-8 py-4 glass z-50">
             <div class="flex flex-col">
                 <h1 class="text-[14px] font-black tracking-[0.3em] uppercase text-[#d1d5db] mb-1">Task Manager</h1>
                 <div class="flex gap-6">
-                    <button onclick="app.toggleView('project')" id="btn-project" class="text-[14px] font-bold uppercase transition">Projects</button>
-                    <button onclick="app.toggleView('priority')" id="btn-priority" class="text-[14px] font-bold uppercase transition">Priorities</button>
+                    <button id="btn-project-toggle" class="text-[14px] font-bold uppercase transition">Projects</button>
+                    <button id="btn-priority-toggle" class="text-[14px] font-bold uppercase transition">Priorities</button>
                 </div>
             </div>
-            <div class="flex items-center gap-4">
-                <button onclick="app.lock()" class="text-[10px] font-black text-[#d1d5db] uppercase tracking-widest hover:text-[#FF8C00]">Lock Vault</button>
-            </div>
+            <button id="btn-lock" class="text-[10px] font-black text-[#d1d5db] uppercase tracking-widest hover:text-[#FF8C00]">Lock Vault</button>
         </nav>
         <div id="main-content"></div>
     </div>
@@ -70,13 +61,8 @@
     <!-- Priority Picker -->
     <div id="priority-popup" class="hidden fixed inset-0 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center z-[100]">
         <div class="w-full sm:w-80 bg-[#313131] p-8 rounded-t-[2.5rem] sm:rounded-[3rem] border border-white/5 text-center shadow-2xl">
-            <div class="flex flex-col gap-2">
-                <button onclick="app.setPriority('red')" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left"><span class="text-3xl" style="color:var(--star-red)">★</span><div class="text-[12px] font-black text-red-500 uppercase">Today</div></button>
-                <button onclick="app.setPriority('orange')" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left"><span class="text-3xl" style="color:var(--star-orange)">★</span><div class="text-[12px] font-black text-orange-500 uppercase">This Week</div></button>
-                <button onclick="app.setPriority('yellow')" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left"><span class="text-3xl" style="color:var(--star-yellow)">★</span><div class="text-[12px] font-black text-yellow-500 uppercase">Soon</div></button>
-                <button onclick="app.setPriority('blue')" class="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left"><span class="text-3xl" style="color:var(--star-blue)">★</span><div class="text-[12px] font-black text-blue-500 uppercase">Someday</div></button>
-            </div>
-            <button onclick="app.closePopup()" class="mt-8 text-[12px] font-bold text-gray-400 uppercase tracking-widest text-center w-full">Cancel</button>
+            <div id="priority-buttons" class="flex flex-col gap-2"></div>
+            <button id="btn-close-popup" class="mt-8 text-[12px] font-bold text-gray-400 uppercase tracking-widest text-center w-full">Cancel</button>
         </div>
     </div>
 
@@ -97,192 +83,179 @@
         const fbApp = initializeApp(firebaseConfig);
         const db = getDatabase(fbApp);
 
-        // APP LOGIC OBJECT
-        window.app = {
-            // New unique key to force a logout on old versions
-            vaultKey: localStorage.getItem('task_pro_secure_v2') || "",
+        // Core State
+        const state = {
+            vaultKey: localStorage.getItem('task_vault_v3') || "",
             tasks: [],
             projects: ["Inbox"],
             prioritiesArr: ["red", "orange", "yellow", "blue"],
             viewMode: 'project',
             activeTaskId: null,
-            editingId: null,
-
-            unlock: function() {
-                const pass = document.getElementById('vault-password').value.trim();
-                if (pass.length < 4) return alert("Password too short.");
-                
-                // Obfuscate the password into a base64 key for the database path
-                this.vaultKey = btoa(pass + "_salt_jnymac").replace(/[/+=]/g, "");
-                localStorage.setItem('task_pro_secure_v2', this.vaultKey);
-                this.init();
-            },
-
-            lock: function() {
-                localStorage.removeItem('task_pro_secure_v2');
-                window.location.reload();
-            },
-
-            init: function() {
-                if (!this.vaultKey) return;
-                
-                document.getElementById('lock-screen').classList.add('hidden');
-                document.getElementById('app-content').classList.remove('hidden');
-
-                const dataRef = ref(db, 'vaults/' + this.vaultKey);
-                onValue(dataRef, (snapshot) => {
-                    const data = snapshot.val();
-                    if (data) {
-                        this.tasks = data.tasks || [];
-                        this.projects = data.projects || ["Inbox"];
-                        this.prioritiesArr = data.priorities || ["red", "orange", "yellow", "blue"];
-                        this.render();
-                    } else {
-                        this.save(); 
-                    }
-                });
-            },
-
-            save: function() {
-                if (!this.vaultKey) return;
-                set(ref(db, 'vaults/' + this.vaultKey), { 
-                    tasks: this.tasks, 
-                    projects: this.projects, 
-                    priorities: this.prioritiesArr 
-                });
-            },
-
-            render: function() {
-                const main = document.getElementById('main-content');
-                if(!main) return;
-                main.innerHTML = '';
-                
-                document.getElementById('btn-project').style.color = (this.viewMode === 'project') ? 'var(--accent-orange)' : '#d1d5db';
-                document.getElementById('btn-priority').style.color = (this.viewMode === 'priority') ? 'var(--accent-orange)' : '#d1d5db';
-
-                const colList = (this.viewMode === 'project') ? this.projects : this.prioritiesArr;
-                
-                colList.forEach(col => {
-                    const columnTasks = this.tasks.filter(t => this.viewMode === 'project' ? t.project === col : t.priority === col)
-                        .sort((a, b) => this.viewMode === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
-
-                    const wrapper = document.createElement('div');
-                    wrapper.className = "column-wrapper";
-                    wrapper.dataset.colname = col;
-                    const label = (this.viewMode === 'project') ? col : {red:'TODAY', orange:'THIS WEEK', yellow:'SOON', blue:'SOMEDAY'}[col];
-                    
-                    wrapper.innerHTML = `
-                        <div class="flex items-center justify-between mb-1 mt-3 px-1 handle cursor-grab flex-shrink-0">
-                            <h2 onclick="app.renameProject('${col}')" class="list-label">${label}</h2>
-                            ${this.viewMode === 'project' ? `<button onclick="app.deleteProject('${col}')" class="text-gray-500 text-sm px-1">×</button>` : ''}
-                        </div>
-                        <button onclick="app.addTask('${col}', 'top')" class="btn-add mb-1">+</button>
-                        <div class="kanban-column" data-col="${col}">
-                            ${columnTasks.map(task => {
-                                const isEditing = this.editingId === task.id;
-                                const starColor = {red:'--star-red', orange:'--star-orange', yellow:'--star-yellow', blue:'--star-blue'}[task.priority];
-                                return `
-                                <div data-id="${task.id}" class="card ${isEditing ? 'ring-2 ring-orange-500/30' : ''}">
-                                    ${isEditing ? `<button onclick="app.deleteTask('${task.id}')" class="absolute top-4 left-4 text-gray-400">🗑️</button>` : ''}
-                                    <div class="${isEditing ? 'pl-8' : ''}" onclick="app.enterEdit('${task.id}')">
-                                        ${isEditing ? `<textarea id="edit-${task.id}" onblur="app.exitEdit('${task.id}', this.value)">${task.text}</textarea>` 
-                                        : `<p class="text-[14px] font-bold leading-snug pr-6 cursor-text">${task.text}</p>`}
-                                    </div>
-                                    <button onclick="app.openPopup('${task.id}')" class="absolute top-4 right-4 text-xl transition" style="color:var(${starColor})">★</button>
-                                    <div class="mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest ${isEditing ? 'pl-8' : ''}">
-                                        ${this.viewMode === 'project' ? labelPriority(task.priority) : task.project}
-                                    </div>
-                                </div>`;
-                            }).join('')}
-                        </div>
-                        <button onclick="app.addTask('${col}', 'bottom')" class="btn-add mt-1 mb-4">+</button>`;
-                    main.appendChild(wrapper);
-
-                    if (!this.editingId) {
-                        new Sortable(wrapper.querySelector('.kanban-column'), {
-                            group: 'tasks', animation: 150, delay: 150, delayOnTouchOnly: true,
-                            onEnd: (e) => {
-                                const task = this.tasks.find(t => t.id === e.item.dataset.id);
-                                if (this.viewMode === 'project') task.project = e.to.dataset.col; else task.priority = e.to.dataset.col;
-                                const ids = Array.from(e.to.querySelectorAll('.card')).map(el => el.dataset.id);
-                                this.tasks.forEach(t => {
-                                    const idx = ids.indexOf(t.id);
-                                    if (idx !== -1) { if (this.viewMode === 'project') t.pOrder = idx; else t.prioOrder = idx; }
-                                });
-                                this.save();
-                            }
-                        });
-                    }
-                });
-
-                if (this.viewMode === 'project') {
-                    const addCol = document.createElement('div');
-                    addCol.className = "column-wrapper flex items-center justify-center";
-                    addCol.innerHTML = `<button onclick="app.addProject()" class="w-full h-24 border border-dashed border-white/10 rounded-2xl text-gray-500 font-black text-[11px] tracking-widest uppercase hover:text-orange-500 transition mb-10">+ Project</button>`;
-                    main.appendChild(addCol);
-                }
-
-                new Sortable(main, { handle: '.handle', animation: 200, delay: 150, delayOnTouchOnly: true,
-                    onEnd: () => {
-                        const newOrder = Array.from(main.querySelectorAll('.column-wrapper')).map(w => w.dataset.colname).filter(n => n);
-                        if (this.viewMode === 'project') this.projects = newOrder; else this.prioritiesArr = newOrder;
-                        this.save();
-                    }
-                });
-                if (this.editingId) { const el = document.getElementById(`edit-${this.editingId}`); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
-            },
-
-            // ACTIONS
-            toggleView: function(m) { this.viewMode = m; this.render(); },
-            openPopup: function(id) { this.activeTaskId = id; document.getElementById('priority-popup').classList.remove('hidden'); },
-            closePopup: function() { document.getElementById('priority-popup').classList.add('hidden'); },
-            setPriority: function(color) {
-                const task = this.tasks.find(t => t.id === this.activeTaskId);
-                if (task) {
-                    task.priority = color;
-                    const samePrio = this.tasks.filter(t => t.priority === color && t.id !== task.id).sort((a,b) => (a.prioOrder||0)-(b.prioOrder||0));
-                    samePrio.forEach((t, i) => t.prioOrder = i + 1);
-                    task.prioOrder = 0; 
-                }
-                this.closePopup(); this.save();
-            },
-            addTask: function(col, pos) {
-                const val = prompt("Task Description:");
-                if (!val) return;
-                const newTask = { id: Date.now().toString(), text: val, project: (this.viewMode==='project'?col:this.projects[0]), priority: (this.viewMode==='priority'?col:'blue'), pOrder: 0, prioOrder: 0 };
-                const colTasks = this.tasks.filter(t => this.viewMode === 'project' ? t.project === col : t.priority === col).sort((a,b)=>(this.viewMode==='project'?(a.pOrder||0)-(b.pOrder||0):(a.prioOrder||0)-(b.prioOrder||0)));
-                if (pos === 'top') colTasks.unshift(newTask); else colTasks.push(newTask);
-                colTasks.forEach((t, i) => { if (this.viewMode === 'project') t.pOrder = i; else t.prioOrder = i; });
-                const others = this.tasks.filter(t => this.viewMode === 'project' ? t.project !== col : t.priority !== col);
-                this.tasks = [...others, ...colTasks]; this.save();
-            },
-            enterEdit: function(id) { this.editingId = id; this.render(); },
-            exitEdit: function(id, txt) { 
-                this.editingId = null; 
-                const t = this.tasks.find(x => x.id === id);
-                if (t && txt.trim()) { t.text = txt.trim(); this.save(); } else this.render();
-            },
-            deleteTask: function(id) { if(confirm("Delete?")) { this.tasks = this.tasks.filter(t => t.id !== id); this.editingId = null; this.save(); }},
-            addProject: function() { const n = prompt("Project Name:"); if (n) { this.projects.push(n); this.save(); }},
-            renameProject: function(old) { 
-                if (this.viewMode !== 'project') return;
-                const n = prompt("Rename:", old); 
-                if (n) { this.projects = this.projects.map(p => p===old?n:p); this.tasks.forEach(t => { if(t.project===old) t.project=n; }); this.save(); }
-            },
-            deleteProject: function(n) {
-                if (this.projects.length > 1 && confirm("Delete Project?")) {
-                    const fb = this.projects.find(p => p !== n);
-                    this.tasks.forEach(t => { if(t.project===n) t.project=fb; });
-                    this.projects = this.projects.filter(p => p !== n);
-                    this.save();
-                }
-            }
+            editingId: null
         };
 
-        function labelPriority(c) { return {red:'TODAY', orange:'THIS WEEK', yellow:'SOON', blue:'SOMEDAY'}[c] || c; }
+        // --- CORE FUNCTIONS ---
+        const save = () => {
+            if (!state.vaultKey) return;
+            set(ref(db, 'vaults/' + state.vaultKey), { 
+                tasks: state.tasks, 
+                projects: state.projects, 
+                priorities: state.prioritiesArr 
+            });
+        };
 
-        // Start
-        app.init();
-    </script>
-</body>
-</html>
+        const render = () => {
+            const main = document.getElementById('main-content');
+            if(!main) return;
+            main.innerHTML = '';
+            
+            document.getElementById('btn-project-toggle').style.color = (state.viewMode === 'project') ? 'var(--accent-orange)' : '#d1d5db';
+            document.getElementById('btn-priority-toggle').style.color = (state.viewMode === 'priority') ? 'var(--accent-orange)' : '#d1d5db';
+
+            const colList = (state.viewMode === 'project') ? state.projects : state.prioritiesArr;
+            
+            colList.forEach(col => {
+                const columnTasks = state.tasks.filter(t => state.viewMode === 'project' ? t.project === col : t.priority === col)
+                    .sort((a, b) => state.viewMode === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
+
+                const wrapper = document.createElement('div');
+                wrapper.className = "column-wrapper";
+                wrapper.dataset.colname = col;
+                const label = (state.viewMode === 'project') ? col : {red:'TODAY', orange:'THIS WEEK', yellow:'SOON', blue:'SOMEDAY'}[col];
+                
+                wrapper.innerHTML = `
+                    <div class="flex items-center justify-between mb-1 mt-3 px-1 handle cursor-grab flex-shrink-0">
+                        <h2 class="list-label btn-rename" data-col="${col}">${label}</h2>
+                        ${state.viewMode === 'project' ? `<button class="text-gray-500 text-sm px-1 btn-delete-proj" data-col="${col}">×</button>` : ''}
+                    </div>
+                    <button class="btn-add mb-1 btn-add-top" data-col="${col}">+</button>
+                    <div class="kanban-column" data-col="${col}">
+                        ${columnTasks.map(task => {
+                            const isEditing = state.editingId === task.id;
+                            const starColor = {red:'--star-red', orange:'--star-orange', yellow:'--star-yellow', blue:'--star-blue'}[task.priority];
+                            return `
+                            <div data-id="${task.id}" class="card ${isEditing ? 'ring-2 ring-orange-500/30' : ''}">
+                                ${isEditing ? `<button class="absolute top-4 left-4 text-gray-400 btn-kill-task" data-id="${task.id}">🗑️</button>` : ''}
+                                <div class="${isEditing ? 'pl-8' : ''} btn-trigger-edit" data-id="${task.id}">
+                                    ${isEditing ? `<textarea id="edit-${task.id}">${task.text}</textarea>` 
+                                    : `<p class="text-[14px] font-bold leading-snug pr-6 cursor-text">${task.text}</p>`}
+                                </div>
+                                <button class="absolute top-4 right-4 text-xl transition btn-open-prio" data-id="${task.id}" style="color:var(${starColor})">★</button>
+                                <div class="mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest ${isEditing ? 'pl-8' : ''}">
+                                    ${state.viewMode === 'project' ? ({red:'TODAY', orange:'THIS WEEK', yellow:'SOON', blue:'SOMEDAY'}[task.priority]) : task.project}
+                                </div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                    <button class="btn-add mt-1 mb-4 btn-add-bottom" data-col="${col}">+</button>`;
+                main.appendChild(wrapper);
+
+                // Tasks Sorting
+                if (!state.editingId) {
+                    new Sortable(wrapper.querySelector('.kanban-column'), {
+                        group: 'tasks', animation: 150, delay: 150, delayOnTouchOnly: true,
+                        onEnd: (e) => {
+                            const task = state.tasks.find(t => t.id === e.item.dataset.id);
+                            if (state.viewMode === 'project') task.project = e.to.dataset.col; else task.priority = e.to.dataset.col;
+                            const ids = Array.from(e.to.querySelectorAll('.card')).map(el => el.dataset.id);
+                            state.tasks.forEach(t => {
+                                const idx = ids.indexOf(t.id);
+                                if (idx !== -1) { if (state.viewMode === 'project') t.pOrder = idx; else t.prioOrder = idx; }
+                            });
+                            save();
+                        }
+                    });
+                }
+            });
+
+            if (state.viewMode === 'project') {
+                const addCol = document.createElement('div');
+                addCol.className = "column-wrapper flex items-center justify-center";
+                addCol.innerHTML = `<button id="btn-new-project" class="w-full h-24 border border-dashed border-white/10 rounded-2xl text-gray-500 font-black text-[11px] tracking-widest uppercase hover:text-orange-500 transition mb-10">+ Project</button>`;
+                main.appendChild(addCol);
+            }
+
+            // Columns Sorting
+            new Sortable(main, { handle: '.handle', animation: 200, delay: 150, delayOnTouchOnly: true,
+                onEnd: () => {
+                    const newOrder = Array.from(main.querySelectorAll('.column-wrapper')).map(w => w.dataset.colname).filter(n => n);
+                    if (state.viewMode === 'project') state.projects = newOrder; else state.prioritiesArr = newOrder;
+                    save();
+                }
+            });
+
+            if (state.editingId) { 
+                const el = document.getElementById(`edit-${state.editingId}`); 
+                if (el) {
+                    el.focus(); el.setSelectionRange(el.value.length, el.value.length);
+                    el.onblur = () => {
+                        const txt = el.value.trim();
+                        const t = state.tasks.find(x => x.id === state.editingId);
+                        if (t && txt) t.text = txt;
+                        state.editingId = null;
+                        save();
+                    };
+                }
+            }
+            attachEventListeners();
+        };
+
+        // --- EVENT DELEGATION (Fixes "Nothing Happens" on Buttons) ---
+        function attachEventListeners() {
+            document.querySelectorAll('.btn-add-top').forEach(b => b.onclick = () => addTask(b.dataset.col, 'top'));
+            document.querySelectorAll('.btn-add-bottom').forEach(b => b.onclick = () => addTask(b.dataset.col, 'bottom'));
+            document.querySelectorAll('.btn-open-prio').forEach(b => b.onclick = () => { state.activeTaskId = b.dataset.id; document.getElementById('priority-popup').classList.remove('hidden'); });
+            document.querySelectorAll('.btn-trigger-edit').forEach(b => b.onclick = () => { state.editingId = b.dataset.id; render(); });
+            document.querySelectorAll('.btn-kill-task').forEach(b => b.onclick = () => { if(confirm("Delete?")) { state.tasks = state.tasks.filter(t => t.id !== b.dataset.id); state.editingId = null; save(); }});
+            document.querySelectorAll('.btn-rename').forEach(b => b.onclick = () => {
+                if (state.viewMode !== 'project') return;
+                const n = prompt("Rename:", b.dataset.col);
+                if (n) { state.projects = state.projects.map(p => p===b.dataset.col?n:p); state.tasks.forEach(t => { if(t.project===b.dataset.col) t.project=n; }); save(); }
+            });
+            document.querySelectorAll('.btn-delete-proj').forEach(b => b.onclick = () => {
+                if (state.projects.length > 1 && confirm("Delete Project?")) {
+                    const fb = state.projects.find(p => p !== b.dataset.col);
+                    state.tasks.forEach(t => { if(t.project===b.dataset.col) t.project=fb; });
+                    state.projects = state.projects.filter(p => p !== b.dataset.col);
+                    save();
+                }
+            });
+            const np = document.getElementById('btn-new-project');
+            if(np) np.onclick = () => { const n = prompt("Project Name:"); if (n) { state.projects.push(n); save(); }};
+        }
+
+        const addTask = (col, pos) => {
+            const val = prompt("Task Description:");
+            if (!val) return;
+            const newTask = { id: Date.now().toString(), text: val, project: (state.viewMode==='project'?col:state.projects[0]), priority: (state.viewMode==='priority'?col:'blue'), pOrder: 0, prioOrder: 0 };
+            const colTasks = state.tasks.filter(t => state.viewMode === 'project' ? t.project === col : t.priority === col).sort((a,b)=>(state.viewMode==='project'?(a.pOrder||0)-(b.pOrder||0):(a.prioOrder||0)-(b.prioOrder||0)));
+            if (pos === 'top') colTasks.unshift(newTask); else colTasks.push(newTask);
+            colTasks.forEach((t, i) => { if (state.viewMode === 'project') t.pOrder = i; else t.prioOrder = i; });
+            const others = state.tasks.filter(t => state.viewMode === 'project' ? t.project !== col : t.priority !== col);
+            state.tasks = [...others, ...colTasks]; save();
+        };
+
+        // --- SYSTEM ACTIONS ---
+        const initSync = () => {
+            const dataRef = ref(db, 'vaults/' + state.vaultKey);
+            onValue(dataRef, (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    state.tasks = data.tasks || [];
+                    state.projects = data.projects || ["Inbox"];
+                    state.prioritiesArr = data.priorities || ["red", "orange", "yellow", "blue"];
+                    render();
+                } else {
+                    save(); 
+                }
+            });
+        };
+
+        // EXPOSE TO HTML
+        document.getElementById('unlock-btn').onclick = () => {
+            const p = document.getElementById('vault-password').value.trim();
+            if (p.length < 4) return alert("Key too short.");
+            state.vaultKey = btoa(p + "_secure_jnymac").replace(/[/+=]/g, "");
+            localStorage.setItem('task_vault_v3', state.vaultKey);
+            document.getElementById('lock-screen').classList.add('hidden');
+            document.getEl
