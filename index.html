@@ -81,6 +81,7 @@
         }
         .btn-add:hover { color: var(--accent-orange); }
         
+        /* Compact White Cards */
         .card { 
             background: #ffffff;
             border-radius: 1.25rem;
@@ -126,13 +127,13 @@
             </div>
         </div>
         <div class="flex items-center gap-4">
-            <p id="sync-status" class="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Syncing...</p>
+            <p id="sync-status" class="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Connecting...</p>
             <button onclick="exportData()" class="text-xl opacity-20 hover:opacity-100 transition">💾</button>
         </div>
     </nav>
 
     <div id="main-content">
-        <div class="p-10 text-gray-500 uppercase tracking-[0.3em] text-xs font-bold">Connecting...</div>
+        <div class="p-10 text-gray-500 uppercase tracking-[0.3em] text-xs font-bold">Syncing board...</div>
     </div>
 
     <!-- Priority Picker Overlay -->
@@ -171,7 +172,7 @@
         let tasks = [], projects = ["Inbox"], prioritiesArr = ["red", "orange", "yellow", "blue"];
         let viewMode = 'project', activeTaskId = null, editingId = null;
 
-        // Sync Listener
+        // Start listening to Database immediately
         onValue(tasksRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
@@ -181,8 +182,12 @@
                 document.getElementById('sync-status').innerText = "Live";
                 window.render();
             } else {
+                // Initialize cloud if totally empty
                 window.save(); 
             }
+        }, (error) => {
+            document.getElementById('sync-status').innerText = "Permission Denied";
+            console.error(error);
         });
 
         window.save = () => set(tasksRef, { tasks, projects, priorities: prioritiesArr });
@@ -208,7 +213,7 @@
                 wrapper.innerHTML = `
                     <div class="flex items-center justify-between mb-1 mt-3 px-1 handle cursor-grab flex-shrink-0">
                         <h2 onclick="${viewMode === 'project' ? `renameProject('${col}')` : ''}" class="list-label">${label}</h2>
-                        ${viewMode === 'project' ? `<button onclick="deleteProject('${col}')" class="text-gray-500 text-sm hover:text-red-400 px-1">×</button>` : ''}
+                        ${viewMode === 'project' ? `<button onclick="deleteProject('${col}')" class="text-gray-500 text-lg hover:text-red-400 px-1">×</button>` : ''}
                     </div>
                     <button onclick="addTaskAtPos('${col}', 'top')" class="btn-add mb-1">+</button>
                     <div class="kanban-column" data-col="${col}">
@@ -230,7 +235,8 @@
                             </div>`;
                         }).join('')}
                     </div>
-                    <button onclick="addTaskAtPos('${col}', 'bottom')" class="btn-add mt-1 mb-4">+</button>`;
+                    <button onclick="addTaskAtPos('${col}', 'bottom')" class="btn-add mt-1 mb-4">+</button>
+                `;
                 main.appendChild(wrapper);
 
                 if (!editingId) {
@@ -244,7 +250,7 @@
             if (viewMode === 'project') {
                 const addCol = document.createElement('div');
                 addCol.className = "column-wrapper flex items-center justify-center";
-                addCol.innerHTML = `<button onclick="addProject()" class="w-full h-24 border border-dashed border-white/10 rounded-2xl text-gray-500 font-black text-[11px] tracking-widest uppercase hover:text-orange-500 transition mb-10">+ Project</button>`;
+                addCol.innerHTML = `<button onclick="addProject()" class="w-full h-32 border border-dashed border-white/10 rounded-2xl text-gray-500 font-black text-[11px] tracking-widest uppercase hover:text-orange-500 transition mb-10">+ Project</button>`;
                 main.appendChild(addCol);
             }
 
@@ -303,32 +309,3 @@
             });
         }
         function getPriorityLabel(c) { return { red:'TODAY', orange:'THIS WEEK', yellow:'SOON', blue:'SOMEDAY' }[c] || c; }
-        window.enterEditMode = (id) => { if (editingId === id) return; editingId = id; window.render(); };
-        window.exitEditMode = (id, txt) => {
-            editingId = null;
-            const t = tasks.find(x => x.id === id);
-            if (t && txt.trim()) { t.text = txt.trim(); window.save(); } else window.render();
-        };
-        window.deleteTask = (id) => { if(confirm("Delete Task?")){ tasks = tasks.filter(t => t.id !== id); editingId = null; window.save(); }};
-        window.openPopup = (id) => { activeTaskId = id; document.getElementById('priority-popup').classList.remove('hidden'); };
-        window.closePopup = () => document.getElementById('priority-popup').classList.add('hidden');
-        window.addProject = () => { const n = prompt("Project Name:"); if (n && !projects.includes(n)) { projects.push(n); window.save(); }};
-        window.renameProject = (old) => { 
-            const n = prompt("Rename to:", old); if (n && n !== old) { projects = projects.map(p => p === old ? n : p); tasks.forEach(t => { if (t.project === old) t.project = n; }); window.save(); }
-        };
-        window.deleteProject = (n) => {
-            if (projects.length <= 1) return;
-            if (confirm(`Delete ${n}?`)) {
-                const fb = projects[0] === n ? projects[1] : projects[0];
-                tasks.forEach(t => { if (t.project === n) t.project = fb; });
-                projects = projects.filter(p => p !== n);
-                window.save();
-            }
-        };
-        window.exportData = () => {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({tasks, projects, priorities: prioritiesArr}));
-            const dl = document.createElement('a'); dl.setAttribute("href", dataStr); dl.setAttribute("download", "tasks.json"); dl.click();
-        };
-    </script>
-</body>
-</html>
