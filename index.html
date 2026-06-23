@@ -83,7 +83,8 @@
         </div>
     </div>
 
-    <script type="module">
+    <!-- Replace your entire script section with this -->
+<script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
     import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
@@ -107,40 +108,39 @@
     let tasks = [], projects = ["Inbox"], prioritiesArr = ["red", "orange", "yellow", "blue"];
     let viewMode = 'project', activeTaskId = null, editingId = null;
 
-    // --- LOG-IN GATEKEEPER ---
-    onAuthStateChanged(auth, (user) => {
-        const errorEl = document.getElementById('error-msg');
-        
-        if (user) {
-            // Check email (case-insensitive and trimmed)
-            const userEmail = user.email.toLowerCase().trim();
-            const allowedEmail = "jnymac@gmail.com".toLowerCase().trim();
+    // --- DEBUG LOGGING ---
+    function log(msg) {
+        console.log(msg);
+        document.getElementById('error-msg').innerText = msg;
+    }
 
-            if (userEmail === allowedEmail) {
-                console.log("Access Granted");
-                errorEl.innerText = "";
+    // --- AUTH LISTENER ---
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            const userEmail = user.email.toLowerCase().trim();
+            if (userEmail === "jnymac@gmail.com") {
+                log("Logged in as jnymac@gmail.com. Fetching data...");
                 document.getElementById('login-screen').classList.add('hidden');
                 document.getElementById('app-content').classList.remove('hidden');
                 initDataSync();
             } else {
-                console.log("Access Denied for:", userEmail);
-                errorEl.innerText = "ACCESS DENIED: " + userEmail + " is not authorized.";
-                setTimeout(() => signOut(auth), 2000); 
+                log("Unauthorized: " + userEmail);
+                setTimeout(() => signOut(auth), 2000);
             }
         } else {
+            log("Waiting for login...");
             document.getElementById('login-screen').classList.remove('hidden');
             document.getElementById('app-content').classList.add('hidden');
         }
     });
 
+    // --- LOGIN FUNCTION ---
     window.login = () => {
+        log("Opening Google Login...");
         signInWithPopup(auth, provider)
-            .then((result) => {
-                console.log("Login Success");
-            })
+            .then(() => log("Google Sign-in Successful"))
             .catch((error) => {
-                console.error("Login Error:", error.code);
-                document.getElementById('error-msg').innerText = "Auth Error: " + error.code;
+                log("Error: " + error.code + ". Check Third-Party Cookie settings.");
             });
     };
 
@@ -155,31 +155,34 @@
                 projects = data.projects || ["Inbox"];
                 prioritiesArr = data.priorities || ["red", "orange", "yellow", "blue"];
                 window.render();
+            } else {
+                log("No cloud data found. Initializing...");
+                window.save();
             }
+        }, (error) => {
+            log("Database Error: " + error.message);
         });
     }
 
-    window.save = () => set(tasksRef, { tasks, projects, priorities: prioritiesArr });
+    window.save = () => {
+        set(tasksRef, { tasks, projects, priorities: prioritiesArr })
+            .catch(e => log("Save Failed: " + e.message));
+    };
 
-    // --- RENDERING ENGINE ---
+    // --- RENDER ENGINE ---
     window.render = function() {
         const main = document.getElementById('main-content');
         if(!main) return;
         main.innerHTML = '';
         updateNav();
-
         const colList = viewMode === 'project' ? projects : prioritiesArr;
-        
         colList.forEach(col => {
             const columnTasks = tasks.filter(t => viewMode === 'project' ? t.project === col : t.priority === col)
                 .sort((a, b) => viewMode === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
-
             const wrapper = document.createElement('div');
             wrapper.className = "column-wrapper";
             wrapper.dataset.colname = col;
-
             const label = viewMode === 'project' ? col : getPriorityLabel(col);
-            
             wrapper.innerHTML = `
                 <div class="flex items-center justify-between mb-1 mt-3 px-1 handle cursor-grab flex-shrink-0">
                     <h2 onclick="${viewMode === 'project' ? `renameProject('${col}')` : ''}" class="list-label">${label}</h2>
@@ -191,12 +194,12 @@
                         const isEditing = editingId === task.id;
                         return `
                         <div data-id="${task.id}" class="card ${isEditing ? 'ring-2 ring-orange-500/30' : ''}">
-                            ${isEditing ? `<button onclick="deleteTask('${task.id}')" class="absolute top-4 left-4 text-gray-400 hover:text-red-500">🗑️</button>` : ''}
+                            ${isEditing ? `<button onclick="deleteTask('${task.id}')" class="absolute top-4 left-4 text-gray-400">🗑️</button>` : ''}
                             <div class="${isEditing ? 'pl-8' : ''}" onclick="enterEditMode('${task.id}')">
                                 ${isEditing ? `<textarea id="edit-${task.id}" onblur="exitEditMode('${task.id}', this.value)" onkeydown="if(event.key==='Enter'){this.blur(); event.preventDefault();}">${task.text}</textarea>` 
                                 : `<p class="text-[14px] font-bold leading-snug pr-6 cursor-text">${task.text}</p>`}
                             </div>
-                            <button onclick="openPopup('${task.id}')" class="absolute top-4 right-4 text-xl star-${task.priority} transition">★</button>
+                            <button onclick="openPopup('${task.id}')" class="absolute top-4 right-4 text-xl star-${task.priority}">★</button>
                             <div class="mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest ${isEditing ? 'pl-8' : ''}">
                                 ${viewMode === 'project' ? getPriorityLabel(task.priority) : task.project}
                             </div>
@@ -204,9 +207,7 @@
                     }).join('')}
                 </div>
                 <button onclick="addTaskAtPos('${col}', 'bottom')" class="btn-add mt-1 mb-4">+</button>`;
-            
             main.appendChild(wrapper);
-
             if (!editingId) {
                 new Sortable(wrapper.querySelector('.kanban-column'), {
                     group: 'tasks', animation: 200, ghostClass: 'sortable-ghost', delay: 150, delayOnTouchOnly: true,
@@ -214,14 +215,12 @@
                 });
             }
         });
-
         if (viewMode === 'project') {
             const addCol = document.createElement('div');
             addCol.className = "column-wrapper flex items-center justify-center";
             addCol.innerHTML = `<button onclick="addProject()" class="w-full h-24 border border-dashed border-white/10 rounded-2xl text-gray-500 font-black text-[11px] tracking-widest uppercase hover:text-orange-500 transition mb-10">+ Project</button>`;
             main.appendChild(addCol);
         }
-
         initListSorting(main);
         if (editingId) { const el = document.getElementById(`edit-${editingId}`); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
     };
@@ -249,7 +248,6 @@
         const task = tasks.find(t => t.id === activeTaskId);
         if (!task) return;
         task.priority = newColor;
-        // Bump to top of priority list
         const samePrioTasks = tasks.filter(t => t.priority === newColor && t.id !== task.id).sort((a, b) => (a.prioOrder || 0) - (b.prioOrder || 0));
         samePrioTasks.forEach((t, i) => t.prioOrder = i + 1);
         task.prioOrder = 0;
