@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sync Tasks</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --star-blue: #3b82f6;
+            --star-yellow: #FFD700;
+            --star-orange: #FF8C00;
+            --star-red: #ef4444;
+        }
+        body { font-family: -apple-system, sans-serif; background-color: #f9f9f9; color: #1a1a1a; }
+        .kanban-column { min-height: 75vh; }
+        .card { cursor: grab; }
+        .card:active { cursor: grabbing; }
+        .dragging { opacity: 0.2; }
+        .drop-line { height: 3px; background-color: #6366f1; border-radius: 4px; margin: 4px 0; pointer-events: none; width: 100%; }
+        .star-blue { color: var(--star-blue); }
+        .star-yellow { color: var(--star-yellow); }
+        .star-orange { color: var(--star-orange); }
+        .star-red { color: var(--star-red); }
+        .project-title:hover .delete-proj { opacity: 1; }
+        .glass { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body class="p-0 m-0 overflow-x-hidden">
+
+    <nav class="flex justify-between items-center px-10 py-8 sticky top-0 glass z-50">
+        <div class="flex items-center gap-8">
+            <h1 id="view-title" class="text-xs font-black tracking-widest uppercase text-gray-900">Project Board</h1>
+            <button onclick="toggleView()" class="text-[10px] font-bold text-gray-400 hover:text-indigo-600 transition flex items-center gap-2 tracking-widest uppercase">
+                <span id="toggle-icon">⇄</span> <span id="toggle-text">Priority View</span>
+            </button>
+        </div>
+        <div class="flex items-center gap-6">
+            <button onclick="addTask()" class="text-[10px] font-black bg-black text-white px-6 py-3 rounded-full hover:bg-gray-700 transition tracking-widest shadow-lg">
+                + NEW TASK
+            </button>
+        </div>
+    </nav>
+
+    <main id="board-container" class="flex px-10 gap-10 overflow-x-auto items-start pb-20">
+        <div class="p-10 text-gray-400 text-sm">Connecting to cloud...</div>
+    </main>
+
+    <!-- Priority Popup -->
+    <div id="priority-popup" class="hidden fixed inset-0 bg-white/90 backdrop-blur-xl flex items-center justify-center z-[100]">
+        <div class="w-80 bg-white p-8 rounded-[2.5rem] shadow-2xl border border-gray-100 text-center">
+            <h3 class="text-[10px] font-black tracking-[0.3em] text-gray-300 mb-8 uppercase">Set Timeline</h3>
+            <div class="flex flex-col gap-2">
+                <button onclick="setPriority('red')" class="flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition group text-left">
+                    <span class="text-3xl star-red group-hover:scale-110 transition">★</span>
+                    <div><div class="text-[10px] font-black text-red-500 uppercase">Today</div><div class="text-[11px] text-gray-400">Critical</div></div>
+                </button>
+                <button onclick="setPriority('orange')" class="flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition group text-left">
+                    <span class="text-3xl star-orange group-hover:scale-110 transition">★</span>
+                    <div><div class="text-[10px] font-black text-orange-500 uppercase">This Week</div><div class="text-[11px] text-gray-400">Upcoming</div></div>
+                </button>
+                <button onclick="setPriority('yellow')" class="flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition group text-left">
+                    <span class="text-3xl star-yellow group-hover:scale-110 transition">★</span>
+                    <div><div class="text-[10px] font-black text-yellow-500 uppercase">Soon</div><div class="text-[11px] text-gray-400">2-3 Weeks</div></div>
+                </button>
+                <button onclick="setPriority('blue')" class="flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl transition group text-left">
+                    <span class="text-3xl star-blue group-hover:scale-110 transition">★</span>
+                    <div><div class="text-[10px] font-black text-blue-500 uppercase">Someday</div><div class="text-[11px] text-gray-400">Ideas</div></div>
+                </button>
+            </div>
+            <button onclick="closePopup()" class="mt-8 w-full text-[10px] font-bold text-gray-300 hover:text-black transition uppercase">Cancel</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // FIREBASE CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyCRSI7mZQDo6WiECYM4Cbh3ZEOZjnH6YaU",
+            authDomain: "my-tasks-319e9.firebaseapp.com",
+            projectId: "my-tasks-319e9",
+            storageBucket: "my-tasks-319e9.firebasestorage.app",
+            messagingSenderId: "789706458775",
+            appId: "1:789706458775:web:bf61fcdba5d9cbf59f4bd2",
+            measurementId: "G-WLKSCG3P1D"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const tasksRef = ref(db, 'tasks_data');
+
+        // APP STATE
+        let tasks = [];
+        let projects = ["Inbox"];
+        let currentView = 'project';
+        let activeTaskId = null;
+        const priorities = ["red", "orange", "yellow", "blue"]; // Reversed Order: Today first
+
+        // LOAD: Sync from Firebase
+        onValue(tasksRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                tasks = data.tasks || [];
+                projects = data.projects || ["Inbox"];
+                window.render();
+            } else {
+                window.save(); // Initialize if empty
+            }
+        });
+
+        // SAVE: Sync to Firebase
+        window.save = function() {
+            set(tasksRef, {
+                tasks: tasks,
+                projects: projects
+            });
+        };
+
+        // RENDER ENGINE
+        window.render = function() {
+            const container = document.getElementById('board-container');
+            if (!container) return;
+            container.innerHTML = '';
+            
+            document.getElementById('view-title').innerText = currentView === 'project' ? "Project Board" : "Priority Board";
+            document.getElementById('toggle-text').innerText = currentView === 'project' ? "PRIORITY VIEW" : "PROJECT VIEW";
+
+            const columns = currentView === 'project' ? projects : priorities;
+
+            columns.forEach(col => {
+                const columnTasks = tasks.filter(t => currentView === 'project' ? t.project === col : t.priority === col)
+                    .sort((a, b) => currentView === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
+
+                const colDiv = document.createElement('div');
+                colDiv.className = "w-72 flex-shrink-0";
+                
+                const label = currentView === 'project' ? col : getPriorityLabel(col);
+                const headerHtml = currentView === 'project' ? 
+                    `<div class="project-title flex items-center justify-between mb-8 group px-2">
+                        <h2 onclick="renameProject('${col}')" class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] cursor-pointer hover:text-black transition">${label}</h2>
+                        <button onclick="deleteProject('${col}')" class="delete-proj opacity-0 text-gray-300 hover:text-red-500 font-bold transition">×</button>
+                    </div>` :
+                    `<h2 class="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] mb-8 px-2">${label}</h2>`;
+
+                colDiv.innerHTML = `
+                    ${headerHtml}
+                    <div class="kanban-column" data-col="${col}" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+                        ${columnTasks.map(task => `
+                            <div id="${task.id}" draggable="true" ondragstart="handleDragStart(event)" ondragend="handleDragEnd(event)"
+                                 class="card bg-white p-6 mb-4 rounded-3xl shadow-[0_2px_15px_rgba(0,0,0,0,0.02)] border border-gray-100 relative group transition-all hover:shadow-md">
+                                <p class="text-[13px] font-medium text-gray-700 leading-snug pr-8">${task.text}</p>
+                                <button onclick="openPopup('${task.id}')" class="absolute top-5 right-5 text-xl star-${task.priority} opacity-80 hover:opacity-100 transition-transform hover:scale-125">★</button>
+                                <div class="mt-5 flex items-center gap-2">
+                                    <span class="text-[9px] font-black text-gray-300 uppercase tracking-widest">${currentView === 'project' ? getPriorityLabel(task.priority) : task.project}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                container.appendChild(colDiv);
+            });
+
+            if (currentView === 'project') {
+                const addCol = document.createElement('button');
+                addCol.onclick = addProject;
+                addCol.className = "w-72 h-32 flex-shrink-0 border-2 border-dashed border-gray-200 rounded-[2rem] flex items-center justify-center text-gray-300 hover:text-gray-500 hover:border-gray-400 transition font-black text-[10px] tracking-widest";
+                addCol.innerText = "+ ADD PROJECT";
+                container.appendChild(addCol);
+            }
+        };
+
+        function getPriorityLabel(color) {
+            const labels = { red: 'TODAY', orange: 'THIS WEEK', yellow: 'SOON', blue: 'SOMEDAY' };
+            return labels[color] || color;
+        }
+
+        // DRAG & DROP
+        window.handleDragStart = (e) => { e.dataTransfer.setData("text", e.target.id); setTimeout(() => e.target.classList.add('dragging'), 0); };
+        window.handleDragEnd = (e) => { e.target.classList.remove('dragging'); removeLines(); };
+        window.handleDragOver = (e) => {
+            e.preventDefault();
+            const col = e.currentTarget;
+            const afterElement = getDragAfterElement(col, e.clientY);
+            removeLines();
+            const line = document.createElement('div');
+            line.className = 'drop-line';
+            if (!afterElement) col.appendChild(line); else col.insertBefore(line, afterElement);
+        };
+        window.handleDragLeave = (e) => { if (!e.currentTarget.contains(e.relatedTarget)) removeLines(); };
+        const removeLines = () => document.querySelectorAll('.drop-line').forEach(l => l.remove());
+
+        window.handleDrop = (e) => {
+            e.preventDefault();
+            const taskId = e.dataTransfer.getData("text");
+            const targetCol = e.currentTarget.getAttribute('data-col');
+            const afterElement = getDragAfterElement(e.currentTarget, e.clientY);
+            const task = tasks.find(t => t.id === taskId);
+            
+            if (currentView === 'project') task.project = targetCol; else task.priority = targetCol;
+
+            const colTasks = tasks.filter(t => currentView === 'project' ? t.project === targetCol : t.priority === targetCol)
+                                  .filter(t => t.id !== taskId)
+                                  .sort((a, b) => currentView === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
+
+            if (!afterElement) colTasks.push(task); else colTasks.splice(colTasks.findIndex(t => t.id === afterElement.id), 0, task);
+            colTasks.forEach((t, i) => { if (currentView === 'project') t.pOrder = i; else t.prioOrder = i; });
+            
+            removeLines();
+            window.save();
+        };
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.card:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) return { offset: offset, element: child };
+                else return closest;
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // ACTIONS
+        window.toggleView = () => { currentView = currentView === 'project' ? 'priority' : 'project'; window.render(); };
+        window.openPopup = (id) => { activeTaskId = id; document.getElementById('priority-popup').classList.remove('hidden'); };
+        window.closePopup = () => document.getElementById('priority-popup').classList.add('hidden');
+        window.setPriority = (color) => { tasks.find(t => t.id === activeTaskId).priority = color; window.closePopup(); window.save(); };
+        window.addTask = () => {
+            const val = prompt("Task description:");
+            if (val) {
+                tasks.push({ id: Date.now().toString(), text: val, project: projects[0], priority: "blue", pOrder: 99, prioOrder: 99 });
+                window.save();
+            }
+        };
+        window.addProject = () => {
+            const name = prompt("Project name:");
+            if (name && !projects.includes(name)) { projects.push(name); window.save(); }
+        };
+        window.renameProject = (old) => {
+            if (currentView !== 'project') return;
+            const name = prompt("Rename to:", old);
+            if (name && name !== old) {
+                projects = projects.map(p => p === old ? name : p);
+                tasks.forEach(t => { if (t.project === old) t.project = name; });
+                window.save();
+            }
+        };
+        window.deleteProject = (name) => {
+            if (projects.length <= 1) return;
+            if (confirm(`Delete project "${name}"?`)) {
+                const fallback = projects[0] === name ? projects[1] : projects[0];
+                tasks.forEach(t => { if (t.project === name) t.project = fallback; });
+                projects = projects.filter(p => p !== name);
+                window.save();
+            }
+        };
+    </script>
+</body>
+</html>
