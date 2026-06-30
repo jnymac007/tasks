@@ -3,13 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Task Manager Pro v1.9</title>
+    <title>Task Manager Pro v2.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <style>
         :root {
             --star-blue: #3b82f6; --star-yellow: #FFD700; --star-orange: #FF8C00; --star-red: #ef4444;
             --ui-bg: #313131; --ui-shading: #3d3d3d; --accent-orange: #FF8C00; --light-gray: #d1d5db;
+            --tag-green: #679F16;
+            --person-blue: #64ACC5;
         }
         body { font-family: -apple-system, sans-serif; background-color: var(--ui-bg); color: #f8fafc; overscroll-behavior: none; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         nav { height: 80px; flex-shrink: 0; }
@@ -35,14 +37,21 @@
         .version-badge { background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.3); padding: 4px 12px; border-radius: 99px; font-size: 10px; font-weight: 800; letter-spacing: 1px; margin-top: 10px; }
 
         /* Tag Styling */
-        .mention { text-decoration: underline; color: #6366f1; font-weight: 700; }
-        .hashtag { text-decoration: underline; color: #10b981; font-weight: 700; }
+        .mention { text-decoration: underline; color: var(--person-blue); font-weight: 700; }
+        .hashtag { text-decoration: underline; color: var(--tag-green); font-weight: 700; }
 
         /* Filter Bar Styling */
-        #filter-bar { background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 8px 20px; display: flex; gap: 10px; overflow-x: auto; white-space: nowrap; flex-shrink: 0; }
-        #filter-bar::-webkit-scrollbar { display: none; }
-        .filter-pill { padding: 4px 12px; border-radius: 99px; font-size: 10px; font-weight: 800; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s; color: #94a3b8; text-transform: uppercase; }
+        #filter-bar { background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 12px 20px; flex-shrink: 0; max-height: 200px; overflow-y: auto; }
+        .filter-group { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+        .filter-group:last-child { margin-bottom: 0; }
+        .filter-group-label { font-size: 9px; font-weight: 900; color: #666; width: 70px; text-transform: uppercase; letter-spacing: 1px; flex-shrink: 0; }
+        .filter-pill { padding: 3px 10px; border-radius: 99px; font-size: 10px; font-weight: 800; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s; color: #94a3b8; text-transform: uppercase; }
         .filter-pill.active { background: var(--accent-orange); color: white; border-color: var(--accent-orange); }
+        
+        /* Toggle Switch */
+        .mode-toggle { display: flex; background: #222; padding: 2px; border-radius: 8px; margin-right: 15px; }
+        .mode-toggle button { font-size: 9px; font-weight: 900; padding: 4px 10px; border-radius: 6px; }
+        .mode-toggle .active { background: var(--accent-orange); color: white; }
     </style>
 </head>
 <body>
@@ -50,13 +59,13 @@
     <!-- LOGIN SCREEN -->
     <div id="login-screen">
         <h1 class="text-[#d1d5db] text-[20px] font-black tracking-[0.5em] uppercase">Private Vault</h1>
-        <div class="version-badge">VERSION 1.9.0</div>
+        <div class="version-badge">VERSION 2.0.0</div>
         <div class="flex flex-col gap-4 w-72 mt-12">
             <button onclick="handleLoginRequest()" class="bg-[#FF8C00] text-white py-4 rounded-full font-bold text-sm tracking-widest uppercase shadow-xl hover:bg-orange-600 active:scale-95 transition-all">
                 Sign in with Google
             </button>
         </div>
-        <p id="boot-log" class="text-white/10 text-[10px] mt-12 uppercase tracking-[0.3em] px-10">Restricted Access</p>
+        <p id="boot-log" class="text-white/10 text-[10px] mt-12 uppercase tracking-[0.3em] px-10">jnymac Restricted</p>
     </div>
 
     <!-- MAIN APP -->
@@ -72,7 +81,7 @@
             <button id="nav-btn-logout" class="text-[10px] font-black text-[#d1d5db] uppercase tracking-widest hover:text-[#FF8C00]">Sign Out</button>
         </nav>
         
-        <!-- Filter Bar (Only visible in Priority View) -->
+        <!-- Filter Bar -->
         <div id="filter-bar" style="display:none"></div>
 
         <div id="main-content"></div>
@@ -115,7 +124,8 @@
             view: 'project',
             activeTask: null,
             editing: null,
-            activeFilters: [], // Stores currently selected filters
+            activeFilters: [], // { val, type }
+            filterMode: 'any', // 'any' or 'all'
 
             save: function() {
                 if (!this.user) return;
@@ -136,7 +146,6 @@
                 });
             },
 
-            // Extract unique @mentions and #hashtags for filter list
             getFilterOptions: function() {
                 const people = new Set();
                 const tags = new Set();
@@ -144,50 +153,59 @@
                     (t.text.match(/@\w+/g) || []).forEach(p => people.add(p));
                     (t.text.match(/#\w+/g) || []).forEach(tg => tags.add(tg));
                 });
-                return {
-                    projects: this.projects,
-                    people: Array.from(people).sort(),
-                    tags: Array.from(tags).sort()
-                };
+                return { projects: this.projects, people: Array.from(people).sort(), tags: Array.from(tags).sort() };
             },
 
             renderFilterBar: function() {
                 const bar = document.getElementById('filter-bar');
-                if (this.view !== 'priority') {
-                    bar.style.display = 'none';
-                    return;
-                }
-                bar.style.display = 'flex';
+                if (this.view !== 'priority') { bar.style.display = 'none'; return; }
+                bar.style.display = 'block';
                 bar.innerHTML = '';
                 
                 const options = this.getFilterOptions();
                 
-                const addPill = (val, type) => {
-                    const pill = document.createElement('div');
-                    pill.className = `filter-pill ${this.activeFilters.includes(val) ? 'active' : ''}`;
-                    pill.innerText = val;
-                    pill.onclick = () => {
-                        if (this.activeFilters.includes(val)) {
-                            this.activeFilters = this.activeFilters.filter(f => f !== val);
-                        } else {
-                            this.activeFilters.push(val);
-                        }
-                        this.render();
-                    };
-                    bar.appendChild(pill);
+                // Logic Toggle
+                const topRow = document.createElement('div');
+                topRow.className = "flex justify-between items-center mb-4 pb-2 border-b border-white/5";
+                topRow.innerHTML = `
+                    <div class="flex items-center">
+                        <span class="text-[9px] font-black text-gray-500 uppercase mr-3">Match Mode:</span>
+                        <div class="mode-toggle">
+                            <button id="mode-any" class="${this.filterMode==='any'?'active':''}">ANY</button>
+                            <button id="mode-all" class="${this.filterMode==='all'?'active':''}">ALL</button>
+                        </div>
+                    </div>
+                    <button id="clear-filters" class="text-[9px] font-black text-white/30 uppercase tracking-widest hover:text-white">Clear All</button>
+                `;
+                bar.appendChild(topRow);
+
+                document.getElementById('mode-any').onclick = () => { this.filterMode = 'any'; this.render(); };
+                document.getElementById('mode-all').onclick = () => { this.filterMode = 'all'; this.render(); };
+                document.getElementById('clear-filters').onclick = () => { this.activeFilters = []; this.render(); };
+
+                const addCategory = (label, list, type) => {
+                    if (list.length === 0) return;
+                    const group = document.createElement('div');
+                    group.className = "filter-group";
+                    group.innerHTML = `<span class="filter-group-label">${label}</span>`;
+                    list.forEach(val => {
+                        const pill = document.createElement('div');
+                        const isActive = this.activeFilters.some(f => f.val === val && f.type === type);
+                        pill.className = `filter-pill ${isActive ? 'active' : ''}`;
+                        pill.innerText = val;
+                        pill.onclick = () => {
+                            if (isActive) this.activeFilters = this.activeFilters.filter(f => !(f.val === val && f.type === type));
+                            else this.activeFilters.push({ val, type });
+                            this.render();
+                        };
+                        group.appendChild(pill);
+                    });
+                    bar.appendChild(group);
                 };
 
-                options.projects.forEach(p => addPill(p, 'project'));
-                options.people.forEach(p => addPill(p, 'person'));
-                options.tags.forEach(t => addPill(t, 'tag'));
-
-                if (this.activeFilters.length > 0) {
-                    const clear = document.createElement('div');
-                    clear.className = "filter-pill bg-white/10 text-white border-none";
-                    clear.innerText = "Clear All";
-                    clear.onclick = () => { this.activeFilters = []; this.render(); };
-                    bar.appendChild(clear);
-                }
+                addCategory('Projects', options.projects, 'project');
+                addCategory('People', options.people, 'person');
+                addCategory('Tags', options.tags, 'tag');
             },
 
             formatText: function(str) {
@@ -211,12 +229,14 @@
                     let filteredTasks = this.tasks.filter(t => this.view === 'project' ? t.project === col : t.priority === col)
                         .sort((a, b) => this.view === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
 
-                    // Apply active filters
+                    // Filter Logic
                     if (this.view === 'priority' && this.activeFilters.length > 0) {
                         filteredTasks = filteredTasks.filter(t => {
-                            return this.activeFilters.some(f => 
-                                t.project === f || t.text.includes(f)
-                            );
+                            const matches = this.activeFilters.map(f => {
+                                if (f.type === 'project') return t.project === f.val;
+                                return t.text.includes(f.val);
+                            });
+                            return this.filterMode === 'all' ? matches.every(m => m) : matches.some(m => m);
                         });
                     }
 
@@ -269,7 +289,7 @@
                 if (this.view === 'project') {
                     const b = document.createElement('div');
                     b.className = "column-wrapper flex items-center justify-center";
-                    b.innerHTML = `<button id="create-proj-btn" class="w-full h-24 border border-dashed border-white/10 rounded-2xl text-gray-500 font-black text-[11px] tracking-widest uppercase hover:text-orange-500 transition mb-10">+ Project</button>`;
+                    b.innerHTML = `<button id="create-proj-btn" class="w-full h-24 border border-dashed border-white/10 rounded-2xl text-gray-500 font-bold text-[11px] uppercase tracking-widest">+ Project</button>`;
                     main.appendChild(b);
                     document.getElementById('create-proj-btn').onclick = () => { const n = prompt("Project Name:"); if(n) { this.projects.push(n); this.save(); }};
                 }
@@ -347,11 +367,11 @@
         getRedirectResult(auth).catch(e => console.error(e));
 
         document.getElementById('nav-btn-logout').onclick = () => signOut(auth).then(() => window.location.reload());
-        document.getElementById('nav-btn-project').onclick = () => { TM.view = 'project'; TM.activeFilters = []; TM.render(); };
+        document.getElementById('nav-btn-project').onclick = () => { TM.view = 'project'; TM.render(); };
         document.getElementById('nav-btn-priority').onclick = () => { TM.view = 'priority'; TM.render(); };
         document.getElementById('btn-prio-cancel').onclick = () => document.getElementById('priority-popup').classList.add('hidden');
 
-        // Setup Priority popup buttons
+        // Setup Priority List
         const pc = document.getElementById('prio-list-container');
         ['red','orange','yellow','blue'].forEach(c => {
             const btn = document.createElement('button');
@@ -371,7 +391,7 @@
             pc.appendChild(btn);
         });
 
-        function labelPriority(c) { return {red:'TODAY', orange:'THIS WEEK', yellow:'SOON', blue:'SOMEDAY'}[c] || c; }
+        function labelPriority(c) { return {red:'TODAY', orange:'WEEK', yellow:'SOON', blue:'SOMEDAY'}[c] || c; }
 
     </script>
 </body>
