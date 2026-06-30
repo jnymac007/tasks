@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Task Manager Pro</title>
+    <title>Task Manager Pro v1.9</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <style>
@@ -13,21 +13,36 @@
         }
         body { font-family: -apple-system, sans-serif; background-color: var(--ui-bg); color: #f8fafc; overscroll-behavior: none; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         nav { height: 80px; flex-shrink: 0; }
-        #main-content { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; flex-grow: 1; height: calc(100vh - 80px); }
+        
+        #main-content { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; flex-grow: 1; height: 100%; }
         .column-wrapper { flex: 0 0 85vw; padding: 0 12px; scroll-snap-align: center; border-right: 1px solid rgba(255, 255, 255, 0.05); display: flex; flex-direction: column; height: 100%; }
         .column-wrapper:nth-child(even) { background-color: var(--ui-shading); }
-        @media (min-width: 768px) { .column-wrapper { flex: 0 0 300px; scroll-snap-align: start; } }
+        @media (min-width: 768px) { .column-wrapper { flex: 0 0 320px; scroll-snap-align: start; } }
+        
         .kanban-column { flex-grow: 1; overflow-y: auto; overflow-x: hidden; padding-right: 2px; margin-bottom: 4px; -webkit-overflow-scrolling: touch; }
         .kanban-column::-webkit-scrollbar { width: 3px; }
         .kanban-column::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+
         .card { background: #ffffff; border-radius: 1.25rem; padding: 1.2rem; margin-bottom: 0.75rem; box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.4); color: #1a1a1a; position: relative; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
         textarea { background: transparent; border: none; outline: none; resize: none; width: 100%; font-family: inherit; font-size: 14px; font-weight: 600; color: #111827; padding: 0; margin: 0; user-select: text; }
+        
         .list-label { color: var(--accent-orange); font-size: 14px; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; }
         .btn-add { width: 100%; padding: 6px; font-size: 24px; font-weight: 300; color: rgba(255,255,255,0.15); border-radius: 0.75rem; transition: all 0.2s; line-height: 1; flex-shrink: 0; }
         .btn-add:hover { color: var(--accent-orange); }
+        
         .glass { background: rgba(49, 49, 49, 0.9); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.05); }
         #login-screen { position: fixed; inset: 0; z-index: 9999; background: var(--ui-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
         .version-badge { background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.3); padding: 4px 12px; border-radius: 99px; font-size: 10px; font-weight: 800; letter-spacing: 1px; margin-top: 10px; }
+
+        /* Tag Styling */
+        .mention { text-decoration: underline; color: #6366f1; font-weight: 700; }
+        .hashtag { text-decoration: underline; color: #10b981; font-weight: 700; }
+
+        /* Filter Bar Styling */
+        #filter-bar { background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 8px 20px; display: flex; gap: 10px; overflow-x: auto; white-space: nowrap; flex-shrink: 0; }
+        #filter-bar::-webkit-scrollbar { display: none; }
+        .filter-pill { padding: 4px 12px; border-radius: 99px; font-size: 10px; font-weight: 800; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s; color: #94a3b8; text-transform: uppercase; }
+        .filter-pill.active { background: var(--accent-orange); color: white; border-color: var(--accent-orange); }
     </style>
 </head>
 <body>
@@ -35,16 +50,13 @@
     <!-- LOGIN SCREEN -->
     <div id="login-screen">
         <h1 class="text-[#d1d5db] text-[20px] font-black tracking-[0.5em] uppercase">Private Vault</h1>
-        <div class="version-badge">VERSION 1.8.0</div>
-        
+        <div class="version-badge">VERSION 1.9.0</div>
         <div class="flex flex-col gap-4 w-72 mt-12">
-            <button id="google-login-btn" onclick="handleLoginRequest()" 
-                    class="bg-[#FF8C00] text-white py-4 rounded-full font-bold text-sm tracking-widest uppercase shadow-xl hover:bg-orange-600 active:scale-95 transition-all">
+            <button onclick="handleLoginRequest()" class="bg-[#FF8C00] text-white py-4 rounded-full font-bold text-sm tracking-widest uppercase shadow-xl hover:bg-orange-600 active:scale-95 transition-all">
                 Sign in with Google
             </button>
         </div>
-        
-        <p id="boot-log" class="text-white/10 text-[10px] mt-12 uppercase tracking-[0.3em] px-10">Restricted to jnymac@gmail.com</p>
+        <p id="boot-log" class="text-white/10 text-[10px] mt-12 uppercase tracking-[0.3em] px-10">Restricted Access</p>
     </div>
 
     <!-- MAIN APP -->
@@ -53,16 +65,20 @@
             <div class="flex flex-col">
                 <h1 class="text-[14px] font-black tracking-[0.3em] uppercase text-[#d1d5db] mb-1">Task Manager</h1>
                 <div class="flex gap-6">
-                    <button id="nav-btn-project" class="text-[14px] font-bold uppercase">Projects</button>
-                    <button id="nav-btn-priority" class="text-[14px] font-bold uppercase">Priorities</button>
+                    <button id="nav-btn-project" class="text-[14px] font-bold uppercase transition">Projects</button>
+                    <button id="nav-btn-priority" class="text-[14px] font-bold uppercase transition">Priorities</button>
                 </div>
             </div>
             <button id="nav-btn-logout" class="text-[10px] font-black text-[#d1d5db] uppercase tracking-widest hover:text-[#FF8C00]">Sign Out</button>
         </nav>
+        
+        <!-- Filter Bar (Only visible in Priority View) -->
+        <div id="filter-bar" style="display:none"></div>
+
         <div id="main-content"></div>
     </div>
 
-    <!-- PRIORITY POPUP -->
+    <!-- PRIORITY PICKER -->
     <div id="priority-popup" class="hidden fixed inset-0 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center z-[100]">
         <div class="w-full sm:w-80 bg-[#313131] p-8 rounded-t-[2.5rem] sm:rounded-[3rem] border border-white/5 text-center shadow-2xl">
             <div id="prio-list-container" class="flex flex-col gap-2"></div>
@@ -99,6 +115,7 @@
             view: 'project',
             activeTask: null,
             editing: null,
+            activeFilters: [], // Stores currently selected filters
 
             save: function() {
                 if (!this.user) return;
@@ -108,8 +125,7 @@
             },
 
             init: function() {
-                const dataRef = ref(db, 'vaults/jnymac_main_vault');
-                onValue(dataRef, (snap) => {
+                onValue(ref(db, 'vaults/jnymac_main_vault'), (snap) => {
                     const d = snap.val();
                     if (d) {
                         this.tasks = d.tasks || [];
@@ -120,10 +136,71 @@
                 });
             },
 
+            // Extract unique @mentions and #hashtags for filter list
+            getFilterOptions: function() {
+                const people = new Set();
+                const tags = new Set();
+                this.tasks.forEach(t => {
+                    (t.text.match(/@\w+/g) || []).forEach(p => people.add(p));
+                    (t.text.match(/#\w+/g) || []).forEach(tg => tags.add(tg));
+                });
+                return {
+                    projects: this.projects,
+                    people: Array.from(people).sort(),
+                    tags: Array.from(tags).sort()
+                };
+            },
+
+            renderFilterBar: function() {
+                const bar = document.getElementById('filter-bar');
+                if (this.view !== 'priority') {
+                    bar.style.display = 'none';
+                    return;
+                }
+                bar.style.display = 'flex';
+                bar.innerHTML = '';
+                
+                const options = this.getFilterOptions();
+                
+                const addPill = (val, type) => {
+                    const pill = document.createElement('div');
+                    pill.className = `filter-pill ${this.activeFilters.includes(val) ? 'active' : ''}`;
+                    pill.innerText = val;
+                    pill.onclick = () => {
+                        if (this.activeFilters.includes(val)) {
+                            this.activeFilters = this.activeFilters.filter(f => f !== val);
+                        } else {
+                            this.activeFilters.push(val);
+                        }
+                        this.render();
+                    };
+                    bar.appendChild(pill);
+                };
+
+                options.projects.forEach(p => addPill(p, 'project'));
+                options.people.forEach(p => addPill(p, 'person'));
+                options.tags.forEach(t => addPill(t, 'tag'));
+
+                if (this.activeFilters.length > 0) {
+                    const clear = document.createElement('div');
+                    clear.className = "filter-pill bg-white/10 text-white border-none";
+                    clear.innerText = "Clear All";
+                    clear.onclick = () => { this.activeFilters = []; this.render(); };
+                    bar.appendChild(clear);
+                }
+            },
+
+            formatText: function(str) {
+                return str
+                    .replace(/(@\w+)/g, '<u class="mention">$1</u>')
+                    .replace(/(#\w+)/g, '<u class="hashtag">$1</u>');
+            },
+
             render: function() {
                 const main = document.getElementById('main-content');
                 if(!main) return;
                 main.innerHTML = '';
+                this.renderFilterBar();
 
                 document.getElementById('nav-btn-project').style.color = (this.view === 'project') ? 'var(--accent-orange)' : '#d1d5db';
                 document.getElementById('nav-btn-priority').style.color = (this.view === 'priority') ? 'var(--accent-orange)' : '#d1d5db';
@@ -131,13 +208,21 @@
                 const cols = (this.view === 'project') ? this.projects : this.priorities;
                 
                 cols.forEach(col => {
-                    const filteredTasks = this.tasks.filter(t => this.view === 'project' ? t.project === col : t.priority === col)
+                    let filteredTasks = this.tasks.filter(t => this.view === 'project' ? t.project === col : t.priority === col)
                         .sort((a, b) => this.view === 'project' ? (a.pOrder || 0) - (b.pOrder || 0) : (a.prioOrder || 0) - (b.prioOrder || 0));
+
+                    // Apply active filters
+                    if (this.view === 'priority' && this.activeFilters.length > 0) {
+                        filteredTasks = filteredTasks.filter(t => {
+                            return this.activeFilters.some(f => 
+                                t.project === f || t.text.includes(f)
+                            );
+                        });
+                    }
 
                     const wrap = document.createElement('div');
                     wrap.className = "column-wrapper pt-4";
                     wrap.dataset.colname = col;
-
                     const label = (this.view === 'project') ? col : {red:'TODAY', orange:'WEEK', yellow:'SOON', blue:'SOMEDAY'}[col];
 
                     wrap.innerHTML = `
@@ -154,11 +239,11 @@
                                 <div data-id="${t.id}" class="card ${isEdit ? 'ring-2 ring-orange-500/30' : ''}">
                                     ${isEdit ? `<button class="absolute top-4 left-4 text-gray-400 del-task" data-id="${t.id}">🗑️</button>` : ''}
                                     <div class="${isEdit ? 'pl-8' : ''} trigger-edit" data-id="${t.id}">
-                                        ${isEdit ? `<textarea id="edit-${t.id}">${t.text}</textarea>` : `<p class="text-[14px] font-bold leading-snug pr-6 cursor-text">${t.text}</p>`}
+                                        ${isEdit ? `<textarea id="edit-${t.id}">${t.text}</textarea>` : `<p class="text-[14px] font-bold leading-snug pr-6 cursor-text">${this.formatText(t.text)}</p>`}
                                     </div>
                                     <button class="absolute top-4 right-4 text-xl open-prio" data-id="${t.id}" style="color:var(${star})">★</button>
                                     <div class="mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest ${isEdit ? 'pl-8' : ''}">
-                                        ${this.view === 'project' ? ({red:'TODAY', orange:'WEEK', yellow:'SOON', blue:'SOMEDAY'}[t.priority]) : t.project}
+                                        ${this.view === 'project' ? labelPriority(t.priority) : t.project}
                                     </div>
                                 </div>`;
                             }).join('')}
@@ -189,13 +274,11 @@
                     document.getElementById('create-proj-btn').onclick = () => { const n = prompt("Project Name:"); if(n) { this.projects.push(n); this.save(); }};
                 }
 
-                new Sortable(main, { handle: '.handle', animation: 200, delay: 150, delayOnTouchOnly: true,
-                    onEnd: () => {
-                        const newOrder = Array.from(main.querySelectorAll('.column-wrapper')).map(w => w.dataset.colname).filter(n => n);
-                        if (this.view === 'project') this.projects = newOrder; else this.priorities = newOrder;
-                        this.save();
-                    }
-                });
+                new Sortable(main, { handle: '.handle', animation: 200, onEnd: () => {
+                    const newOrder = Array.from(main.querySelectorAll('.column-wrapper')).map(w => w.dataset.colname).filter(n => n);
+                    if (this.view === 'project') this.projects = newOrder; else this.priorities = newOrder;
+                    this.save();
+                }});
 
                 if (this.editing) {
                     const el = document.getElementById(`edit-${this.editing}`);
@@ -219,7 +302,7 @@
                 });
                 document.querySelectorAll('.open-prio').forEach(b => b.onclick = () => { this.activeTask = b.dataset.id; document.getElementById('priority-popup').classList.remove('hidden'); });
                 document.querySelectorAll('.trigger-edit').forEach(b => b.onclick = () => { this.editing = b.dataset.id; this.render(); });
-                document.querySelectorAll('.del-task').forEach(b => b.onclick = () => { if(confirm("Delete?")) { this.tasks = this.tasks.filter(t => t.id !== b.dataset.id); this.editing = null; this.save(); }});
+                document.querySelectorAll('.del-task').forEach(b => b.onclick = () => { if(confirm("Delete Task?")) { this.tasks = this.tasks.filter(t => t.id !== b.dataset.id); this.editing = null; this.save(); }});
                 document.querySelectorAll('.title-click').forEach(b => b.onclick = () => {
                     if (this.view !== 'project') return;
                     const n = prompt("Rename:", b.dataset.col);
@@ -236,12 +319,11 @@
             }
         };
 
-        // --- AUTH CONTROL ---
+        // --- AUTH ---
         onAuthStateChanged(auth, (user) => {
             const log = document.getElementById('boot-log');
             if (user) {
                 if (user.email.toLowerCase() === "jnymac@gmail.com") {
-                    log.innerText = "Welcome, jnymac. Accessing Vault...";
                     TM.user = user;
                     document.getElementById('login-screen').style.display = 'none';
                     document.getElementById('app-content').style.display = 'flex';
@@ -258,26 +340,18 @@
         });
 
         window.handleLoginRequest = () => {
-            document.getElementById('boot-log').innerText = "Authenticating...";
-            // Check for Mobile
-            if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-                signInWithRedirect(auth, provider);
-            } else {
-                signInWithPopup(auth, provider).catch(e => {
-                    document.getElementById('boot-log').innerText = "Login Error: " + e.code;
-                });
-            }
+            if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) signInWithRedirect(auth, provider);
+            else signInWithPopup(auth, provider).catch(e => console.error(e));
         };
 
-        // Handle Redirect Results (Required for mobile)
         getRedirectResult(auth).catch(e => console.error(e));
 
         document.getElementById('nav-btn-logout').onclick = () => signOut(auth).then(() => window.location.reload());
-        document.getElementById('nav-btn-project').onclick = () => { TM.view = 'project'; TM.render(); };
+        document.getElementById('nav-btn-project').onclick = () => { TM.view = 'project'; TM.activeFilters = []; TM.render(); };
         document.getElementById('nav-btn-priority').onclick = () => { TM.view = 'priority'; TM.render(); };
         document.getElementById('btn-prio-cancel').onclick = () => document.getElementById('priority-popup').classList.add('hidden');
 
-        // Priority List setup
+        // Setup Priority popup buttons
         const pc = document.getElementById('prio-list-container');
         ['red','orange','yellow','blue'].forEach(c => {
             const btn = document.createElement('button');
@@ -296,6 +370,8 @@
             };
             pc.appendChild(btn);
         });
+
+        function labelPriority(c) { return {red:'TODAY', orange:'THIS WEEK', yellow:'SOON', blue:'SOMEDAY'}[c] || c; }
 
     </script>
 </body>
