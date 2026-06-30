@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Task Manager Pro v2.2.1</title>
+    <title>Task Manager Pro v2.2.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <style>
         :root {
             --star-blue: #3b82f6; --star-yellow: #FFD700; --star-orange: #FF8C00; --star-red: #ef4444;
             --ui-bg: #313131; --ui-shading: #3d3d3d; --accent-orange: #FF8C00; --light-gray: #d1d5db;
+            --tag-green: #679F16; --person-blue: #64ACC5;
         }
         body { font-family: -apple-system, sans-serif; background-color: var(--ui-bg); color: #f8fafc; overscroll-behavior: none; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         nav { height: 80px; flex-shrink: 0; }
@@ -31,32 +32,54 @@
         .btn-add:hover { color: var(--accent-orange); }
         
         .glass { background: rgba(49, 49, 49, 0.9); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.05); }
-        #lock-screen { position: fixed; inset: 0; z-index: 9999; background: var(--ui-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        #login-screen { position: fixed; inset: 0; z-index: 9999; background: var(--ui-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
         .version-badge { background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.3); padding: 4px 12px; border-radius: 99px; font-size: 10px; font-weight: 800; letter-spacing: 1px; margin-top: 10px; }
+
+        .mention { text-decoration: underline; color: var(--person-blue); font-weight: 700; }
+        .hashtag { text-decoration: underline; color: var(--tag-green); font-weight: 700; }
+
+        #filter-drawer { background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 0; height: 0; overflow: hidden; transition: all 0.2s ease-out; flex-shrink: 0; }
+        #filter-drawer.expanded { height: auto; padding: 15px 20px; }
+        .filter-group { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+        .filter-group-label { font-size: 10px; font-weight: 900; color: #94a3b8; width: 80px; text-transform: uppercase; letter-spacing: 1px; flex-shrink: 0; }
+        .filter-pill { padding: 3px 10px; border-radius: 99px; font-size: 10px; font-weight: 800; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s; color: #94a3b8; text-transform: uppercase; }
+        .filter-pill.active { background: var(--accent-orange); color: white; border-color: var(--accent-orange); }
+        
+        .mode-toggle { display: flex; background: #222; padding: 2px; border-radius: 8px; align-items: center; }
+        .mode-toggle button { font-size: 9px; font-weight: 900; padding: 4px 10px; border-radius: 6px; color: #94a3b8; }
+        .mode-toggle .active { background: var(--accent-orange); color: white; }
+
+        .btn-filter-toggle { font-size: 10px; font-weight: 900; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 8px; margin-left: 20px; display: none; transition: all 0.2s; }
+        .btn-filter-toggle.active { border-color: var(--accent-orange); color: var(--accent-orange); }
+        .chevron { display: inline-block; transition: transform 0.2s; margin-left: 5px; }
+        .btn-filter-toggle.open .chevron { transform: rotate(180deg); }
     </style>
 </head>
 <body>
 
-    <!-- LOCK SCREEN -->
-    <div id="lock-screen">
-        <h1 class="text-[#d1d5db] text-[20px] font-black tracking-[0.5em] uppercase">Private Vault</h1>
-        <div class="version-badge">VERSION 2.2.1</div>
+    <div id="login-screen">
+        <h1 class="text-[#d1d5db] text-[14px] font-black tracking-[0.3em] uppercase text-[#d1d5db] mb-1">Task Manager (2.2.2)</h1>
+        <div class="version-badge">OWNER ACCESS ONLY</div>
         <div class="flex flex-col gap-4 w-72 mt-12">
-            <button id="login-btn" onclick="handleLoginRequest()" class="bg-[#FF8C00] text-white py-4 rounded-full font-bold text-sm tracking-widest uppercase shadow-xl hover:bg-orange-600 active:scale-95 transition-all">
+            <button id="login-trigger" class="bg-[#FF8C00] text-white py-4 rounded-full font-bold text-sm tracking-widest uppercase shadow-xl hover:bg-orange-600 active:scale-95 transition-all">
                 Sign in with Google
             </button>
         </div>
-        <p id="boot-log" class="text-white/10 text-[10px] mt-12 uppercase tracking-[0.3em] px-10">Restricted Access</p>
+        <p id="boot-log" class="text-white/20 text-[10px] mt-12 uppercase tracking-[0.3em] px-10">Waiting for Authentication...</p>
     </div>
 
-    <!-- MAIN APP -->
     <div id="app-content" style="display:none" class="h-full flex flex-col">
         <nav class="flex justify-between items-center px-8 py-4 glass z-50">
-            <div class="flex flex-col">
-                <h1 class="text-[14px] font-black tracking-[0.3em] uppercase text-[#d1d5db] mb-1">Task Manager (2.2.1)</h1>
-                <div class="flex gap-6">
-                    <button id="nav-btn-project" class="text-[14px] font-bold uppercase transition">Projects</button>
-                    <button id="nav-btn-priority" class="text-[14px] font-bold uppercase transition">Priorities</button>
+            <div class="flex flex-col sm:flex-row sm:items-center">
+                <h1 class="text-[14px] font-black tracking-[0.3em] uppercase text-[#d1d5db] mb-1 sm:mb-0 sm:mr-8">Task Manager (2.2.2)</h1>
+                <div class="flex items-center gap-4">
+                    <div class="flex gap-4">
+                        <button id="nav-btn-project" class="text-[14px] font-bold uppercase transition">Projects</button>
+                        <button id="nav-btn-priority" class="text-[14px] font-bold uppercase transition">Priorities</button>
+                    </div>
+                    <button id="btn-filter-toggle" class="btn-filter-toggle items-center">
+                        FILTERS <span class="chevron">▾</span>
+                    </button>
                 </div>
             </div>
             <button id="nav-btn-logout" class="text-[10px] font-black text-[#d1d5db] uppercase tracking-widest hover:text-[#FF8C00]">Sign Out</button>
@@ -66,10 +89,9 @@
         <div id="main-content"></div>
     </div>
 
-    <!-- PRIORITY PICKER -->
     <div id="priority-popup" class="hidden fixed inset-0 bg-black/70 backdrop-blur-md flex items-end sm:items-center justify-center z-[100]">
         <div class="w-full sm:w-80 bg-[#313131] p-8 rounded-t-[2.5rem] sm:rounded-[3rem] border border-white/5 text-center shadow-2xl">
-            <div id="prio-list-container"></div>
+            <div id="prio-list-container" class="flex flex-col gap-2"></div>
             <button id="btn-prio-cancel" class="mt-8 text-[12px] font-bold text-gray-400 uppercase tracking-widest text-center w-full">Cancel</button>
         </div>
     </div>
@@ -90,33 +112,22 @@
             measurementId: "G-WLKSCG3P1D"
         };
 
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const auth = getAuth(app);
+        const fbApp = initializeApp(firebaseConfig);
+        const db = getDatabase(fbApp);
+        const auth = getAuth(fbApp);
         const provider = new GoogleAuthProvider();
 
         window.TM = {
-            user: null,
-            tasks: [],
-            projects: ["Inbox"],
-            priorities: ["red", "orange", "yellow", "blue"],
-            view: 'project',
-            activeTask: null,
-            editing: null,
-            activeFilters: [],
-            filterMode: 'any',
-            filtersExpanded: false,
+            user: null, tasks: [], projects: ["Inbox"], priorities: ["red", "orange", "yellow", "blue"],
+            view: 'project', editing: null, activeFilters: [], filterMode: 'any', filtersExpanded: false,
 
             save: function() {
                 if (!this.user) return;
-                set(ref(db, 'vaults/jnymac_main_vault'), { 
-                    tasks: this.tasks, projects: this.projects, priorities: this.priorities 
-                });
+                set(ref(db, 'vaults/jnymac_main_vault'), { tasks: this.tasks, projects: this.projects, priorities: this.priorities });
             },
 
             init: function() {
-                const dataRef = ref(db, 'vaults/jnymac_main_vault');
-                onValue(dataRef, (snap) => {
+                onValue(ref(db, 'vaults/jnymac_main_vault'), (snap) => {
                     const d = snap.val();
                     if (d) {
                         this.tasks = d.tasks || [];
@@ -127,76 +138,8 @@
                 });
             },
 
-            getFilterOptions: function() {
-                const people = new Set(); const tags = new Set();
-                this.tasks.forEach(t => {
-                    (t.text.match(/@\w+/g) || []).forEach(p => people.add(p));
-                    (t.text.match(/#\w+/g) || []).forEach(tg => tags.add(tg));
-                });
-                return { projects: this.projects, people: Array.from(people).sort(), tags: Array.from(tags).sort() };
-            },
-
-            renderFilterDrawer: function() {
-                const drawer = document.getElementById('filter-drawer');
-                const toggleBtn = document.getElementById('btn-filter-toggle');
-
-                if (this.view !== 'priority') {
-                    drawer.classList.remove('expanded');
-                    toggleBtn.style.display = 'none';
-                    return;
-                }
-
-                toggleBtn.style.display = 'flex';
-                if (this.filtersExpanded) { drawer.classList.add('expanded'); toggleBtn.classList.add('open'); } 
-                else { drawer.classList.remove('expanded'); toggleBtn.classList.remove('open'); }
-
-                if (this.activeFilters.length > 0) toggleBtn.classList.add('active');
-                else toggleBtn.classList.remove('active');
-
-                drawer.innerHTML = '';
-                const options = this.getFilterOptions();
-                
-                const controlRow = document.createElement('div');
-                controlRow.className = "flex justify-between items-center mb-4 pb-2 border-b border-white/5";
-                controlRow.innerHTML = `
-                    <div class="flex items-center">
-                        <span class="text-[9px] font-black text-gray-500 uppercase mr-3">Match Mode:</span>
-                        <div class="mode-toggle">
-                            <button id="mode-any" class="${this.filterMode==='any'?'active':''}">ANY</button>
-                            <button id="mode-all" class="${this.filterMode==='all'?'active':''}">ALL</button>
-                        </div>
-                    </div>
-                    <button id="clear-filters" class="text-[9px] font-black text-white/30">Clear All</button>
-                `;
-                drawer.appendChild(controlRow);
-
-                document.getElementById('mode-any').onclick = () => { this.filterMode = 'any'; this.render(); };
-                document.getElementById('mode-all').onclick = () => { this.filterMode = 'all'; this.render(); };
-                document.getElementById('clear-filters').onclick = () => { this.activeFilters = []; this.render(); };
-
-                const addCategory = (label, list, type) => {
-                    if (list.length === 0) return;
-                    const group = document.createElement('div');
-                    group.className = "filter-group";
-                    group.innerHTML = `<span class="filter-group-label">${label}</span>`;
-                    list.forEach(val => {
-                        const pill = document.createElement('div');
-                        const isActive = this.activeFilters.some(f => f.val === val && f.type === type);
-                        pill.className = `filter-pill ${isActive ? 'active' : ''}`;
-                        pill.innerText = val;
-                        pill.onclick = () => {
-                            if (isActive) this.activeFilters = this.activeFilters.filter(f => !(f.val === val && f.type === type));
-                            else this.activeFilters.push({ val, type });
-                            this.render();
-                        };
-                        group.appendChild(pill);
-                    });
-                    drawer.appendChild(group);
-                };
-
-                addCategory('Projects', options.projects, 'project');
-                addCategory('People', options.people, 'person');
-                addCategory('Tags', options.tags, 'tag');
+            formatText: function(str) {
+                return str.replace(/(@\w+)/g, '<u class="mention">$1</u>').replace(/(#\w+)/g, '<u class="hashtag">$1</u>');
             },
 
             render: function() {
@@ -228,7 +171,7 @@
                     wrap.className = "column-wrapper pt-4";
                     wrap.dataset.colname = col;
                     const label = (this.view === 'project') ? col : {red:'TODAY', orange:'WEEK', yellow:'SOON', blue:'SOMEDAY'}[col];
-                    
+
                     wrap.innerHTML = `
                         <div class="flex items-center justify-between mb-1 mt-3 px-1 handle cursor-grab flex-shrink-0">
                             <h2 class="list-label title-click" data-col="${col}">${label}</h2>
@@ -237,16 +180,16 @@
                         <button class="btn-add mb-1 add-at-pos" data-col="${col}" data-pos="top">+</button>
                         <div class="kanban-column" data-col="${col}">
                             ${filteredTasks.map(t => {
-                                const isEditing = this.editing === t.id;
+                                const isEdit = this.editing === t.id;
                                 const star = {red:'--star-red', orange:'--star-orange', yellow:'--star-yellow', blue:'--star-blue'}[t.priority];
                                 return `
-                                <div data-id="${t.id}" class="card ${isEditing ? 'ring-2 ring-orange-500/30' : ''}">
-                                    ${isEditing ? `<button class="absolute top-4 left-4 text-gray-400 del-task" data-id="${t.id}">🗑️</button>` : ''}
-                                    <div class="${isEditing ? 'pl-8' : ''} trigger-edit" data-id="${t.id}">
-                                        ${isEditing ? `<textarea id="edit-${t.id}">${t.text}</textarea>` : `<p class="text-[14px] font-bold leading-snug pr-6 cursor-text">${this.formatText(t.text)}</p>`}
+                                <div data-id="${t.id}" class="card ${isEdit ? 'ring-2 ring-orange-500/30' : ''}">
+                                    ${isEdit ? `<button class="absolute top-4 left-4 text-gray-400 del-task" data-id="${t.id}">🗑️</button>` : ''}
+                                    <div class="${isEdit ? 'pl-8' : ''} trigger-edit" data-id="${t.id}">
+                                        ${isEdit ? `<textarea id="edit-${t.id}">${t.text}</textarea>` : `<p class="text-[14px] font-bold leading-snug pr-6 cursor-text">${this.formatText(t.text)}</p>`}
                                     </div>
                                     <button class="absolute top-4 right-4 text-xl open-prio" data-id="${t.id}" style="color:var(${star})">★</button>
-                                    <div class="mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest ${isEditing ? 'pl-8' : ''}">
+                                    <div class="mt-3 text-[10px] font-black text-gray-400 uppercase tracking-widest ${isEdit ? 'pl-8' : ''}">
                                         ${this.view === 'project' ? labelPriority(t.priority) : t.project}
                                     </div>
                                 </div>`;
@@ -271,9 +214,8 @@
                 });
 
                 if (this.view === 'project') {
-                    const b = document.createElement('div');
-                    b.className = "column-wrapper flex items-center justify-center";
-                    b.innerHTML = `<button id="create-proj-btn" class="w-full h-24 border border-dashed border-white/10 rounded-2xl text-gray-500 font-black text-[11px] tracking-widest uppercase hover:text-orange-500 transition mb-10">+ Project</button>`;
+                    const b = document.createElement('div'); b.className = "column-wrapper flex items-center justify-center";
+                    b.innerHTML = `<button id="create-proj-btn" class="w-full h-24 border border-dashed border-white/10 rounded-2xl text-gray-500 font-black text-[11px] uppercase tracking-widest">+ Project</button>`;
                     main.appendChild(b);
                     document.getElementById('create-proj-btn').onclick = () => { const n = prompt("Project Name:"); if(n) { this.projects.push(n); this.save(); }};
                 }
@@ -294,6 +236,55 @@
                 this.bindEvents();
             },
 
+            renderFilterDrawer: function() {
+                const drawer = document.getElementById('filter-drawer');
+                const toggleBtn = document.getElementById('btn-filter-toggle');
+                if (this.view !== 'priority') { drawer.classList.remove('expanded'); toggleBtn.style.display = 'none'; return; }
+                toggleBtn.style.display = 'flex';
+                if (this.filtersExpanded) { drawer.classList.add('expanded'); toggleBtn.classList.add('open'); }
+                else { drawer.classList.remove('expanded'); toggleBtn.classList.remove('open'); }
+
+                drawer.innerHTML = '';
+                const options = this.getFilterOptions();
+                const controlRow = document.createElement('div');
+                controlRow.className = "flex items-center mb-5 pb-3 border-b border-white/5";
+                controlRow.innerHTML = `
+                    <span class="text-[9px] font-black text-gray-500 uppercase mr-3">Match Mode:</span>
+                    <div class="mode-toggle">
+                        <button id="mode-any" class="${this.filterMode==='any'?'active':''}">ANY</button>
+                        <button id="mode-all" class="${this.filterMode==='all'?'active':''}">ALL</button>
+                    </div>
+                    <button id="btn-clear-filters" class="ml-4 text-[9px] font-black text-gray-500 uppercase border border-white/10 px-2 py-1 rounded">Clear All</button>
+                `;
+                drawer.appendChild(controlRow);
+
+                document.getElementById('mode-any').onclick = () => { this.filterMode = 'any'; this.render(); };
+                document.getElementById('mode-all').onclick = () => { this.filterMode = 'all'; this.render(); };
+                document.getElementById('btn-clear-filters').onclick = () => { this.activeFilters = []; this.render(); };
+
+                const addCat = (label, list, type) => {
+                    if (list.length === 0) return;
+                    const g = document.createElement('div'); g.className = "filter-group";
+                    g.innerHTML = `<span class="filter-group-label">${label}</span>`;
+                    list.forEach(val => {
+                        const pill = document.createElement('div');
+                        const isActive = this.activeFilters.some(f => f.val === val && f.type === type);
+                        pill.className = `filter-pill ${isActive ? 'active' : ''}`;
+                        pill.innerText = val;
+                        pill.onclick = () => {
+                            if (isActive) this.activeFilters = this.activeFilters.filter(f => !(f.val === val && f.type === type));
+                            else this.activeFilters.push({ val, type });
+                            this.render();
+                        };
+                        g.appendChild(pill);
+                    });
+                    drawer.appendChild(g);
+                };
+                addCat('Projects', options.projects, 'project');
+                addCat('People', options.people, 'person');
+                addCat('Tags', options.tags, 'tag');
+            },
+
             bindEvents: function() {
                 document.querySelectorAll('.add-at-pos').forEach(b => b.onclick = () => {
                     const val = prompt("New Task:"); if(!val) return;
@@ -306,47 +297,60 @@
                 });
                 document.querySelectorAll('.open-prio').forEach(b => b.onclick = () => { this.activeTask = b.dataset.id; document.getElementById('priority-popup').classList.remove('hidden'); });
                 document.querySelectorAll('.trigger-edit').forEach(b => b.onclick = () => { this.editing = b.dataset.id; this.render(); });
-                document.querySelectorAll('.del-task').forEach(b => b.onclick = () => { if(confirm("Delete Task?")){ this.tasks = this.tasks.filter(t => t.id !== b.dataset.id); this.editing = null; this.save(); }});
-                document.querySelectorAll('.title-click').forEach(b => b.onclick = () => {
-                    if (this.view !== 'project') return;
-                    const n = prompt("Rename:", b.dataset.col);
-                    if (n) { this.projects = this.projects.map(p => p===b.dataset.col?n:p); this.tasks.forEach(t => { if(t.project===b.dataset.col) t.project=n; }); this.save(); }
-                });
-                document.querySelectorAll('.proj-del').forEach(b => b.onclick = () => {
-                    if (this.projects.length > 1 && confirm("Delete Project?")) {
-                        const fb = this.projects.find(p => p !== b.dataset.col);
-                        this.tasks.forEach(t => { if (t.project===b.dataset.col) t.project=fb; });
-                        this.projects = this.projects.filter(p => p !== b.dataset.col);
-                        this.save();
-                    }
-                });
+                document.querySelectorAll('.del-task').forEach(b => b.onclick = () => { if(confirm("Delete Task?")) { this.tasks = this.tasks.filter(t => t.id !== b.dataset.id); this.editing = null; this.save(); }});
+                document.querySelectorAll('.title-click').forEach(b => b.onclick = () => { if (this.view !== 'project') return; const n = prompt("Rename:", b.dataset.col); if (n) { this.projects = this.projects.map(p => p===b.dataset.col?n:p); this.tasks.forEach(t => { if(t.project===b.dataset.col) t.project=n; }); this.save(); } });
+                document.querySelectorAll('.proj-del').forEach(b => b.onclick = () => { if (this.projects.length > 1 && confirm("Delete Project?")) { const fb = this.projects.find(p => p !== b.dataset.col); this.tasks.forEach(t => { if (t.project===b.dataset.col) t.project=fb; }); this.projects = this.projects.filter(p => p !== b.dataset.col); this.save(); } });
             }
         };
 
-        // --- INIT ---
-        if (TM.key) TM.init(); else document.getElementById('lock-screen').style.display = 'flex';
+        // --- AUTH FLOW ---
+        async function runAuth() {
+            const log = document.getElementById('boot-log');
+            
+            // Check for redirect result immediately (Fixes mobile loop)
+            try {
+                const result = await getRedirectResult(auth);
+                if (result?.user) loginUser(result.user);
+            } catch (e) { log.innerText = "Error: " + e.code; }
 
-        // --- LISTENERS ---
-        document.getElementById('btn-unlock-trigger').onclick = () => {
-            const p = document.getElementById('vault-pass-field').value.trim();
-            if (p.length < 4) return alert("Password too short");
-            TM.key = btoa(p + "jnymac_v3").replace(/[^a-z0-9]/gi, ""); // Added salt for security
-            localStorage.setItem('task_vault_v4', TM.key);
-            TM.init();
+            onAuthStateChanged(auth, (user) => {
+                if (user) loginUser(user);
+                else document.getElementById('login-screen').style.display = 'flex';
+            });
+        }
+
+        function loginUser(user) {
+            if (user.email.toLowerCase() === "jnymac@gmail.com") {
+                TM.user = user;
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-content').style.display = 'flex';
+                TM.init();
+            } else {
+                document.getElementById('boot-log').innerText = "Denied: " + user.email;
+                setTimeout(() => signOut(auth), 3000);
+            }
+        }
+
+        window.handleLoginRequest = () => {
+            // Mobile (iPhone/Safari) requires Redirect. Desktop uses Popup.
+            if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) signInWithRedirect(auth, provider);
+            else signInWithPopup(auth, provider).catch(e => { document.getElementById('boot-log').innerText = "Login Failed: " + e.code; });
         };
 
-        document.getElementById('vault-pass-field').onkeydown = (e) => { if (e.key === 'Enter') document.getElementById('btn-unlock-trigger').click(); };
-        document.getElementById('nav-btn-logout').onclick = () => { if(confirm("Lock vault?")) { localStorage.removeItem('task_vault_v4'); window.location.reload(); }};
-        document.getElementById('nav-btn-project').onclick = () => { TM.view = 'project'; TM.filtersExpanded = false; TM.activeFilters = []; TM.render(); };
+        runAuth();
+
+        // UI BUTTONS
+        document.getElementById('nav-btn-logout').onclick = () => signOut(auth).then(() => window.location.reload());
+        document.getElementById('nav-btn-project').onclick = () => { TM.view = 'project'; TM.filtersExpanded = false; TM.render(); };
         document.getElementById('nav-btn-priority').onclick = () => { TM.view = 'priority'; TM.render(); };
+        document.getElementById('btn-filter-toggle').onclick = () => { TM.filtersExpanded = !TM.filtersExpanded; TM.render(); };
         document.getElementById('btn-prio-cancel').onclick = () => document.getElementById('priority-popup').classList.add('hidden');
 
-        // Priority Button Setup
         const pc = document.getElementById('prio-list-container');
         ['red','orange','yellow','blue'].forEach(c => {
             const btn = document.createElement('button');
-            btn.className = "flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left";
-            btn.innerHTML = `<span class="text-3xl" style="color:var(--star-${c})">★</span><div class="text-[12px] font-black text-white uppercase">${{red:'Today',orange:'This Week',yellow:'Soon',blue:'Someday'}[c]}</div>`;
+            btn.className = "flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition text-left w-full";
+            btn.innerHTML = `<span class="text-3xl" style="color:var(--star-${c})">★</span><div class="text-[12px] font-black text-white uppercase">${{red:'Today',orange:'Week',yellow:'Soon',blue:'Someday'}[c]}</div>`;
             btn.onclick = () => {
                 const t = TM.tasks.find(x => x.id === TM.activeTask);
                 if (t) {
@@ -355,11 +359,3 @@
                     same.forEach((x, i) => x.prioOrder = i + 1);
                     t.prioOrder = 0;
                 }
-                document.getElementById('priority-popup').classList.add('hidden');
-                TM.save();
-            };
-            pc.appendChild(btn);
-        });
-    </script>
-</body>
-</html>
